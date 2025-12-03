@@ -1,0 +1,26 @@
+[package]
+name = "motor-controller"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+embassy-rp = { workspace = true }
+embassy-time = { workspace = true }
+defmt = { workspace = true }
+thiserror-no-std = { workspace = true }
+embassy-executor = { version = "0.9.1", features = [
+    "defmt",
+    "arch-cortex-m",
+    "executor-thread",
+    "executor-interrupt",
+] }
+embassy-sync = { workspace = true }
+static_cell = { workspace = true }
+portable-atomic = { workspace = true }
+pastey = { workspace = true }
+cortex-m = "0.7.7"
+cortex-m-rt = "0.7.5"
+static_assertions = "1.1.0"
+rp2040-dshot = { path = "../rp2040-dshot" }
+fixed = "1.29.0"
