@@ -15,7 +15,6 @@ pub mod i2c {
             general_call: $general_call:expr,
             scl_pullup: $scl_pullup:expr,
             sda_pullup: $sda_pullup:expr,
-            buffer_size: $buffer_size:expr
         ) => {
             // Asserts that the types of the given SLC pin, SDA, and I2C Peripheral are valid
             assert_impl!($scl_pin: SclPinTrait<$i2c_peripheral>);
@@ -63,7 +62,6 @@ pub mod i2c {
         general_call: false,
         scl_pullup: false,
         sda_pullup: false,
-        buffer_size: 128
     }
 }
 

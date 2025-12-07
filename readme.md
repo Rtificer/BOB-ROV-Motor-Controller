@@ -30,7 +30,6 @@ define_i2c_config! {
     general_call: false,
     scl_pullup: false,
     sda_pullup: false,
-    buffer_size: 128
 }
 ```
 
