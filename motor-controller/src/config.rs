@@ -243,6 +243,5 @@ pub mod telemetry {
         peripheral: UART0,
         telemetry_pin: PIN_13,
         dma_channel: DMA_CH0,
-
     }
 }
