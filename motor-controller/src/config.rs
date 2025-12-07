@@ -4,8 +4,6 @@ pub mod i2c {
     use embassy_rp::i2c_slave;
     use embassy_rp::peripherals::I2C0;
     use embassy_rp::peripherals::{PIN_0, PIN_1};
-    use embassy_rp::{Peri, Peripherals};
-    use pastey::paste;
     use static_assertions::assert_impl_all as assert_impl;
 
     macro_rules! define_i2c_config {
@@ -19,22 +17,28 @@ pub mod i2c {
             sda_pullup: $sda_pullup:expr,
             buffer_size: $buffer_size:expr
         ) => {
+            // Asserts that the types of the given SLC pin, SDA, and I2C Peripheral are valid
+            assert_impl!($scl_pin: SclPinTrait<$i2c_peripheral>);
+            assert_impl!($sda_pin: SdaPinTrait<$i2c_peripheral>);
+
             pub type I2cPeripheral = $i2c_peripheral;
-
-            pub type SclPin = $scl_pin;
-            pub type SdaPin = $sda_pin;
-
-            // Asserts the types the given SLC pin and I2C Peripheral to implement SclPinTrait,
-            assert_impl!(SclPin: SclPinTrait<I2cPeripheral>);
-
-            // Asserts the types the given SDA pin and I2C instance to implement SdaPinTrait,
-            assert_impl!(SdaPin: SdaPinTrait<I2cPeripheral>);
 
             /// Gets the correct peripherals based on configured I2C
             #[macro_export]
             macro_rules! get_i2c_peripherals {
                 ($peripherals:ident) => {
-                    pastey::paste! { (p.[<$i2c_peripheral>], p.[<$scl_pin>], p.[<$sda_pin>]) }
+                    pastey::paste! { ($peripherals.[<$i2c_peripheral>], $peripherals.[<$scl_pin>], $peripherals.[<$sda_pin>]) }
+                }
+            }
+            
+            #[macro_export]
+            macro_rules! bind_i2c_interrupt {
+                () => {
+                    pastey::paste! {
+                        bind_interrupts!(struct I2cIrq {
+                            [<$i2c_peripheral _IRQ>] => i2c::InterruptHandler<$i2c_peripheral>;
+                        });
+                    } 
                 }
             }
 
@@ -69,10 +73,8 @@ pub mod dshot {
     use static_assertions::assert_impl_all as assert_impl;
     use embassy_rp::peripherals::*;
     use embassy_rp::pio::{self, Pio, PioPin, Pin, Instance, StateMachine};
-    use embassy_rp::Peripherals;
     use rp2040_dshot::encoder::DShotSpeed;
     use embassy_rp::Peri;
-    use pastey::paste;
     use fixed::FixedU32;
     use fixed::types::extra::{U8, U4};
 
@@ -92,24 +94,15 @@ pub mod dshot {
             pio_clock_hz: $pio_clock:expr,
             update_rate_hz: $update_rate:expr
         ) => {
-            pub type TopFrontRightPin = $top_front_right_pin;
-            pub type TopFrontLeftPin = $top_front_left_pin;
-            pub type TopBackRightPin = $top_back_right_pin;
-            pub type TopBackLeftPin = $top_back_left_pin;
-            pub type BottomFrontRightPin = $bottom_front_right_pin;
-            pub type BottomFrontLeftPin = $bottom_front_left_pin;
-            pub type BottomBackRightPin = $bottom_back_right_pin;
-            pub type BottomBackLeftPin = $bottom_back_left_pin;
-
-            // Ensure that all probided pins are valid.
-            assert_impl!(TopFrontRightPin: PioPin);
-            assert_impl!(TopFrontLeftPin: PioPin);
-            assert_impl!(TopBackRightPin: PioPin);
-            assert_impl!(TopBackLeftPin: PioPin);
-            assert_impl!(BottomFrontRightPin: PioPin);
-            assert_impl!(BottomFrontLeftPin: PioPin);
-            assert_impl!(BottomBackRightPin: PioPin);
-            assert_impl!(BottomBackLeftPin: PioPin);
+            // Ensure that all provided pins are valid.
+            assert_impl!($top_front_right_pin: PioPin);
+            assert_impl!($top_front_left_pin: PioPin);
+            assert_impl!($top_back_right_pin: PioPin);
+            assert_impl!($top_back_left_pin: PioPin);
+            assert_impl!($bottom_front_right_pin: PioPin);
+            assert_impl!($bottom_front_left_pin: PioPin);
+            assert_impl!($bottom_back_right_pin: PioPin);
+            assert_impl!($bottom_back_left_pin: PioPin);
 
             /// Gets the correct dshot pins as defined by define_dshot_config!
             #[macro_export]
@@ -132,14 +125,14 @@ pub mod dshot {
             (
                 pio0: &mut Pio<'d, PIO0>, 
                 pio1: &mut Pio<'d, PIO1>,
-                top_front_right_pin: Peri<'d, TopFrontRightPin>,
-                top_front_left_pin: Peri<'d, TopFrontLeftPin>,
-                top_back_right_pin: Peri<'d, TopBackRightPin>,
-                top_back_left_pin: Peri<'d, TopBackLeftPin>,
-                bottom_front_right_pin: Peri<'d, BottomFrontRightPin>,
-                bottom_front_left_pin: Peri<'d, BottomFrontLeftPin>,
-                bottom_back_right_pin: Peri<'d, BottomBackRightPin>,
-                bottom_back_left_pin: Peri<'d, BottomBackLeftPin>,
+                top_front_right_pin: Peri<'d, $top_front_right_pin>,
+                top_front_left_pin: Peri<'d, $top_front_left_pin>,
+                top_back_right_pin: Peri<'d, $top_back_right_pin>,
+                top_back_left_pin: Peri<'d, $top_back_left_pin>,
+                bottom_front_right_pin: Peri<'d, $bottom_front_right_pin>,
+                bottom_front_left_pin: Peri<'d, $bottom_front_left_pin>,
+                bottom_back_right_pin: Peri<'d, $bottom_back_right_pin>,
+                bottom_back_left_pin: Peri<'d, $bottom_back_left_pin>,
             ) {
                 let top_front_right_pin = pio0.common.make_pio_pin(top_front_right_pin);
                 let top_front_left_pin = pio0.common.make_pio_pin(top_front_left_pin);
@@ -197,6 +190,61 @@ pub mod dshot {
         bottom_back_left_pin: PIN_9,
         dshot_speed: DShotSpeed::DShot1200,
         pio_clock_hz: 19_200_000,
-        update_rate_hz: 19_200_000
+        update_rate_hz: 1_000
+    }
+}
+
+pub mod telemetry {
+    use static_assertions::assert_impl_all as assert_impl;
+    use embassy_rp::peripherals::*;
+    use embassy_rp::uart;
+    use embassy_rp::peripherals::UART0; 
+
+    macro_rules! define_telemtry_config {
+        (
+            peripheral: $uart_peripheral:ty,
+            telemetry_pin: $telemetry_pin:ty,
+            dma_channel: $dma_channel: ty,
+        ) => {
+            // Assert that given telemetry pin is valid
+            assert_impl!($telemetry_pin: uart::RxPin<$uart_peripheral>);
+
+            #[macro_export]
+            macro_rules! get_telemetry_peripherals {
+                ($peripherals:ident) => {
+                    ::pastey::paste!{ ($peripherals.[<$uart_peripheral>], $peripherals.[<$telemetry_pin>], $peripherals.[<$dma_channel>]) }
+                }
+            }
+
+            pub fn get_uart_config() -> uart::Config {
+                let mut config = uart::Config::default();
+
+                // As per KISS ESC specfiication
+                config.baudrate = 115200; 
+                config.data_bits = uart::DataBits::DataBits8;
+                config.stop_bits = uart::StopBits::STOP1;
+                config.parity = uart::Parity::ParityNone;
+
+                config
+            }
+
+            #[macro_export]
+            macro_rules! bind_telemetry_interrupt {
+                () => {
+                    ::pastey::paste! { 
+                        ::embassy_rp::bind_interrupts!(struct UartIrq {
+                            [<$uart_peripheral _IRQ>] => ::embassy_rp::uart::InterruptHandler<::embassy_rp::peripherals::$uart_peripheral>;
+                        });
+                    }
+                }
+            }
+        };
+    }
+
+    define_telemtry_config! {
+        peripheral: UART0,
+        telemetry_pin: PIN_13,
+        dma_channel: DMA_CH0,
+
     }
 }

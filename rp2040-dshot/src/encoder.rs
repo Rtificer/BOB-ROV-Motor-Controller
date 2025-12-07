@@ -1,6 +1,5 @@
 use core::{marker::PhantomData, num::NonZeroU32};
-
-use num_enum::{FromPrimitive, TryFromPrimitive};
+use num_enum::TryFromPrimitive;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DShotSpeed {
@@ -48,7 +47,7 @@ pub trait DShotVariant {
 
     /// Computes the crc value from raw [`u16`] frame data
     fn compute_crc(value: u16) -> u8;
-    
+
     /// Returns the inner speed value.
     fn inner(&self) -> DShotSpeed;
 
@@ -183,7 +182,7 @@ impl<P: DShotVariant> Frame<P> {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, TryFromPrimitive)]
 #[repr(u8)]
 pub enum Command {
-    MotorStop
+    MotorStop,
     /// Wait at least 260ms before next command.
     Beep1,
     /// Wait at least 260ms before next command.
@@ -307,7 +306,7 @@ impl ERpmVarient for StandardERpmFrame {
 
 impl StandardERpmFrame {
     /// Computes [`NonZeroU32`] motor period in us.
-    /// 
+    ///
     /// Returns [`None`] when the motor is stopped (either base or shift is 0)
     pub fn compute_period_us(&self) -> Option<NonZeroU32> {
         if self.base == 0 {
@@ -366,12 +365,10 @@ impl ExtendedERpmData {
             0x0A => Some(ExtendedERpmData::Debug2(data)),
             0x0C => Some(ExtendedERpmData::Debug3(data)),
             0x0E => Some(ExtendedERpmData::StateOrEvent(data)),
-            _ => {
-                Some(ExtendedERpmData::Rpm { 
-                    shift: shift_from_raw(raw),
-                    base: base_from_raw(raw),
-                })
-            } 
+            _ => Some(ExtendedERpmData::Rpm {
+                shift: shift_from_raw(raw),
+                base: base_from_raw(raw),
+            }),
         }
     }
 }
@@ -391,7 +388,10 @@ impl ERpmVarient for ExtendedERpmFrame {
             return None;
         }
 
-        Some(Self{ data: ExtendedERpmData::from_raw(raw)?, crc: crc_raw })
+        Some(Self {
+            data: ExtendedERpmData::from_raw(raw)?,
+            crc: crc_raw,
+        })
     }
 
     fn crc(&self) -> u8 {
@@ -409,13 +409,13 @@ pub enum PeriodComputationResult {
 
 impl ExtendedERpmFrame {
     /// Computes [`NonZeroU32`] motor period in us.
-    /// 
+    ///
     /// Returns [`PeriodComputationResult::StoppedMotor`] when the motor is stopped (either base or shift is 0)
-    /// 
+    ///
     /// Returns [`PeriodComputationResult::NotRpmPacket`] when the packet type is not RPM.
     pub fn compute_period_us(&self) -> Result<NonZeroU32, PeriodComputationResult> {
         let ExtendedERpmData::Rpm { shift, base } = self.data else {
-            return Err(PeriodComputationResult::NotRpmPacket)
+            return Err(PeriodComputationResult::NotRpmPacket);
         };
 
         if base == 0 {
@@ -427,33 +427,86 @@ impl ExtendedERpmFrame {
     }
 
     /// Computes [`u32`] motor Rpm.
-    /// 
+    ///
     /// Returns [`PeriodComputationResult::NotRpmPacket`] when the packet type is not RPM.
     pub fn compute_rpm(&self) -> Result<u32, PeriodComputationResult> {
         match self.compute_period_us() {
             Ok(period) => Ok(60_000_000 / period),
             Err(PeriodComputationResult::StoppedMotor) => Ok(0),
-            Err(e) => Err(e)
+            Err(e) => Err(e),
         }
     }
 
     /// Returns internal 3 bit [`u8`] period_us shift value.
-    /// 
+    ///
     /// Returns [`None`] when the packet is not of type Rpm.
     pub fn shift(&self) -> Option<u8> {
         match self.data {
             ExtendedERpmData::Rpm { shift, .. } => Some(shift),
-            _ => None
+            _ => None,
         }
     }
-    
+
     /// Returns internal 9 bit [`u16`] period_us base value.
-    /// 
+    ///
     /// Returns [`None`] when the packet is not of type Rpm.
     pub fn base(&self) -> Option<u16> {
         match self.data {
             ExtendedERpmData::Rpm { base, .. } => Some(base),
-            _ => None
+            _ => None,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TelemetryFrame {
+    /// deg C
+    temp: u8,
+    /// centivolts
+    voltage: u16,
+    /// centiamps
+    current: u16,
+    /// mAh
+    consumption: u16,
+    /// ERpm / 100 (to get real rpm mutliply by 2 / (magnetpol count))
+    e_rpm: u16,
+    /// crc checksum
+    crc: u8
+}
+
+impl TelemetryFrame {
+    /// Creates an new option of a [`TelemetryFrame`] instance from raw 80 byte data.
+    /// 
+    /// Returns [`None`] when crc checksum is invalid
+    pub fn from_bytes(data: &[u8; 10]) -> Option<Self> {
+        let crc = Self::compute_crc(data);
+        if crc != data[9] {
+            return None;
+        }
+
+        Some(Self {
+            temp: data[0],
+            voltage: u16::from_le_bytes([data[1], data[2]]),
+            current: u16::from_le_bytes([data[3], data[4]]),
+            consumption: u16::from_le_bytes([data[5], data[6]]),
+            e_rpm: u16::from_le_bytes([data[7], data[8]]),
+            crc: data[9],
+        })
+    }
+
+    /// Computes the [`u8`] crc checksum from telemetry byte data
+    fn compute_crc(data: &[u8; 10]) -> u8 {
+        let mut crc: u8 = 0;
+        for &byte in data {
+            crc ^= byte;
+            for _ in 0..8 {
+                if crc & 0x80 != 0 {
+                    crc = (crc << 1) ^ 0x07;
+                } else {
+                    crc <<= 1;
+                }
+            }
+        }
+        crc
     }
 }

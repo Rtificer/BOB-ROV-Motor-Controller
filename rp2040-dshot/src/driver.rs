@@ -95,7 +95,7 @@ pub trait DShotDriver<
     }
 
     #[allow(async_fn_in_trait)]
-    async fn write_command(&mut self, command: Command, request_telemetry: bool) -> Result<(), crate::Error>{
+    async fn write_command(&mut self, command: Command, request_telemetry: bool) -> Result<(), TimeoutError>{
         let frame = Frame::<Self::Variant>::from_command(command, request_telemetry);
 
         Ok(self.write_frame(frame).await?)
@@ -350,9 +350,9 @@ async fn erpm_reader_task_impl<'d, PIO: Instance, const SM: usize>(
             .is_err()
         {
             if channel.is_full() {
-                defmt::error!("Failed to read erpm data from PIO {}: send channel is full! Is the chip overloaded?", SM)
+                defmt::warn!("Failed to read erpm data from PIO {}: send channel is full! Is the chip overloaded?", SM)
             } else {
-                defmt::error!("Failed to read erpm data from PIO {}: unknown data send timeout", SM)
+                defmt::warn!("Failed to read erpm data from PIO {}: unknown data send timeout", SM)
             }
         }
     }
