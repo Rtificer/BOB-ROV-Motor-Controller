@@ -1,7 +1,8 @@
 #![no_std]
 pub mod program;
-pub mod encoder;
 pub mod driver;
+
+pub mod encoder;
 
 pub use program::StandardDShotTimings as StandardDShotTimings;
 pub use program::BdDShotTimings as BdDShotTimings;
@@ -34,12 +35,3 @@ pub enum Error {
     SmSplitFaliure,
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     #[test]
-//     fn generate_programs() {
-//         let dshot1200 = program::generate_dshot_program!(1200_000, 12_000_000);
-//     }
-// }

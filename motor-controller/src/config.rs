@@ -52,8 +52,6 @@ pub mod i2c {
 
                 config
             }
-
-            pub const BUFFER_SIZE: usize = $buffer_size;
         };
     }
 

@@ -20,33 +20,6 @@ trait PrivateDShotDriver<
 >: Sized {
     type Variant: DShotVariant;
 
-    // fn setup_config(
-    //     common: &mut Common<'d, PIO>,
-    //     sm: &mut StateMachine<'d, PIO, SM>,
-    //     pin: Peri<'d, impl PioPin>,
-    //     dshot_speed: DShotSpeed,
-    // ) -> Result<(), crate::Error> {
-    //     let mut config = Config::default();
-
-    //     let clock_divider_float = PIO_CLOCK_HZ as f32 / dshot_speed.bit_rate_hz() as f32;
-    //     config.clock_divider = clock_divider_float.checked_to_fixed()
-    //         .ok_or(crate::Error::ClockDividerConversionError { clock_divider_float })?;
-
-    //     Self::setup_pins(common.make_pio_pin(pin), &mut config);
-
-    //     let program = Self::generate_dshot_program(dshot_speed);
-    //     config.use_program(&common.load_program(&program), &[]);
-
-    //     sm.set_config(&config);
-    //     sm.set_enable(true);
-
-    //     Ok(())
-    // }
-
-    // fn generate_dshot_program(dshot_speed: DShotSpeed) -> Program<PIO_PROGRAM_SIZE>;
-
-    // fn setup_pins(pin: Pin<'d, PIO>, config: &mut Config<'d, PIO>);
-
     /// Returns a mutable reference to the Driver's StateMachineTx
     fn tx(&mut self) -> &mut StateMachineTx<'d, PIO, SM>;
 

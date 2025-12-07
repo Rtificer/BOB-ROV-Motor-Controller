@@ -9,18 +9,20 @@ embassy-rp = { workspace = true }
 embassy-time = { workspace = true }
 defmt = { workspace = true }
 thiserror-no-std = { workspace = true }
+embassy-sync = { workspace = true }
+portable-atomic = { workspace = true }
+pastey = { workspace = true }
+static_cell = { workspace = true }
 embassy-executor = { version = "0.9.1", features = [
     "defmt",
     "arch-cortex-m",
     "executor-thread",
     "executor-interrupt",
 ] }
-embassy-sync = { workspace = true }
-static_cell = { workspace = true }
-portable-atomic = { workspace = true }
-pastey = { workspace = true }
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 static_assertions = "1.1.0"
 rp2040-dshot = { path = "../rp2040-dshot" }
 fixed = "1.29.0"
+defmt-rtt = "1.1.0"
+panic-probe = { version = "1.0.0", features = ["print-defmt"] }
