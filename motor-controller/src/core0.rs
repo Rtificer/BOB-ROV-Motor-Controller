@@ -9,6 +9,7 @@ use embassy_rp::i2c;
 use crate::config;
 use crate::TELEMETRY_BUFFERS;
 
+
 pub struct SmDriverBatch {
     pub pio0_sm0: StandardDShotDriver<'static, PIO0, 0>,
     pub pio0_sm1: StandardDShotDriver<'static, PIO0, 1>,
@@ -20,28 +21,19 @@ pub struct SmDriverBatch {
     pub pio1_sm3: StandardDShotDriver<'static, PIO1, 3>,
 }
 
-
-
 macro_rules! for_each_driver {
     ($batch: expr, |$driver: ident| $body:expr) => {{
-        let $driver = &mut $batch.pio0_sm0;
-        $body;
-        let $driver = &mut $batch.pio0_sm1;
-        $body;
-        let $driver = &mut $batch.pio0_sm2;
-        $body;
-        let $driver = &mut $batch.pio0_sm3;
-        $body;
-        let $driver = &mut $batch.pio1_sm0;
-        $body;
-        let $driver = &mut $batch.pio1_sm1;
-        $body;
-        let $driver = &mut $batch.pio1_sm2;
-        $body;
-        let $driver = &mut $batch.pio1_sm3;
-        $body;
+        let $driver = &mut $batch.pio0_sm0; $body;
+        let $driver = &mut $batch.pio0_sm1; $body;
+        let $driver = &mut $batch.pio0_sm2; $body;
+        let $driver = &mut $batch.pio0_sm3; $body;
+        let $driver = &mut $batch.pio1_sm0; $body;
+        let $driver = &mut $batch.pio1_sm1; $body;
+        let $driver = &mut $batch.pio1_sm2; $body;
+        let $driver = &mut $batch.pio1_sm3; $body;
     }};
 }
+
 
 async fn write_dshot(sms: &mut SmDriverBatch, buffer: &mut [u8; 2]) {
     let first_byte = buffer[0];
@@ -83,6 +75,7 @@ async fn write_dshot(sms: &mut SmDriverBatch, buffer: &mut [u8; 2]) {
     }
 }
 
+
 fn handle_respond_to_read_result(result: Result<i2c_slave::ReadStatus, i2c_slave::Error>) {
     match result {
         Ok(i2c_slave::ReadStatus::Done) => (),
@@ -106,6 +99,7 @@ fn handle_i2c_error(error: i2c_slave::Error) {
         _ => error!("Unknown i2c_slave error!")
     }
 }
+
 
 #[embassy_executor::task]
 pub async fn i2c_task(

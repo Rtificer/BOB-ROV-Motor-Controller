@@ -3,6 +3,7 @@ use defmt::{error};
 
 use crate::TELEMETRY_BUFFERS;
 
+
 #[embassy_executor::task]
 pub async fn dshot_telemetry_task(mut uart: UartRx<'static, uart::Blocking>) {
     let mut internal_buf = [0u8; 10];

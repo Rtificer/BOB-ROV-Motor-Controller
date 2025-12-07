@@ -94,6 +94,7 @@ fn enable_sms<'d>(pio0: &mut Pio<'d, PIO0>, pio1: &mut Pio<'d, PIO1>) {
     pio1.sm3.set_enable(true);
 }
 
+
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let embassy_config = EmbassyConfig::new(ClockConfig::rosc());
