@@ -10,7 +10,7 @@ respectively
 
 
 To run, set up a picoprobe according to the following wiring diagram:\
-![picoprobe wiring diagram](image.png)
+![picoprobe wiring diagram](image.png){ width=300px }\
 Then run:\
 `cargo run --release --package motor-controller --target thumbv6m-none-eabi`
 
