@@ -13,12 +13,7 @@ embassy-sync = { workspace = true }
 portable-atomic = { workspace = true }
 pastey = { workspace = true }
 static_cell = { workspace = true }
-embassy-executor = { version = "0.9.1", features = [
-    "defmt",
-    "arch-cortex-m",
-    "executor-thread",
-    "executor-interrupt",
-] }
+embassy-executor = { workspace = true }
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 static_assertions = "1.1.0"

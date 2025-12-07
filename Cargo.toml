@@ -15,9 +15,13 @@ embassy-time = { version = "0.5.0", features = [
   "defmt",
   "defmt-timestamp-uptime",
 ] }
-
+embassy-executor = { version = "0.9.1", features = [
+    "defmt",
+    "arch-cortex-m",
+    "executor-thread",
+    "executor-interrupt",
+] }
 thiserror-no-std = "2.0.2"
-embassy-executor = { version = "0.9.1", features = ["defmt", "arch-cortex-m"] }
 embassy-sync = "0.7.2"
 static_cell = "2.1.1"
 portable-atomic = "1.11.1"
