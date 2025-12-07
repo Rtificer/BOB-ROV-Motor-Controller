@@ -3,18 +3,18 @@ This repo is a workspace which contains both the rp2040-dshot library and the mo
 
 ## Building and Running
 To build for release use:
-`cargo build --release --package rp2040-dshot --target thumbv6m-none-eabi`
-or
-`cargo build --release --package motor-controller --target thumbv6m-none-eabi`,
+`cargo build --release --package rp2040-dshot --target thumbv6m-none-eabi`\
+or\
+`cargo build --release --package motor-controller --target thumbv6m-none-eabi`,\
 respectively
 
 
-To run, set up a picoprobe according to the following wiring diagram:
+To run, set up a picoprobe according to the following wiring diagram:\
 ![picoprobe wiring diagram](image.png)
-Then run:
+Then run:\
 `cargo run --release --package motor-controller --target thumbv6m-none-eabi`
 
-To run tests simply run:
+To run tests simply run:\
 `cargo test`
 
 ## TODO
