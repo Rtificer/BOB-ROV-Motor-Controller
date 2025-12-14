@@ -42,7 +42,7 @@ async fn write_dshot(sms: &mut SmDriverBatch, buffer: &mut [u8; 2]) {
         // Handle as command
         for_each_driver!(sms, |driver| {
             if let Err(write_error) = driver.write_command(command, true).await {
-                // Match expression here to ensure all error varients are handled, (its 1, but ensure this throws an error if the error type is updated)
+                // Match expression here to ensure all error variants are handled, (its 1, but ensure this throws an error if the error type is updated)
                 match write_error {
                     TimeoutError => error!("Write Dshot command timeout error!"),
                 }
@@ -80,9 +80,9 @@ fn handle_i2c_error(error: i2c_slave::Error) {
         i2c_slave::Error::Abort(reason) => {
             match reason {
                 i2c::AbortReason::NoAcknowledge => error!("I2C Aborted! Bus operation not acknowledged!"),
-                i2c::AbortReason::ArbitrationLoss => error!("I2C Aborted! Abritration lost!"),
+                i2c::AbortReason::ArbitrationLoss => error!("I2C Aborted! Arbitration lost!"),
                 i2c::AbortReason::TxNotEmpty(remaining) => error!("I2C Aborted! Transmit ended with data still in fifo! Remaining: {}", remaining),
-                i2c::AbortReason::Other(data) => error!("I2C aborted! Reason unknown! Attatched Data (idk what this is): {}", data)
+                i2c::AbortReason::Other(data) => error!("I2C aborted! Reason unknown! Attached Data (idk what this is): {}", data)
             }
         }
         i2c_slave::Error::InvalidResponseBufferLength => error!("I2C read buffer is 0 length!"),
@@ -124,7 +124,7 @@ pub async fn i2c_task(
                 TELEMETRY_BUFFERS.read(&mut telemetry_buffer);
                 handle_respond_to_read_result(device.respond_to_read(&telemetry_buffer).await);
             },
-            Ok(i2c_slave::Command::GeneralCall(_)) => warn!("Recieved erronious GeneralCall i2c instruction!"),
+            Ok(i2c_slave::Command::GeneralCall(_)) => warn!("Received erroneous GeneralCall i2c instruction!"),
             Err(error) => handle_i2c_error(error),
         }
     }

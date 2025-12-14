@@ -53,9 +53,9 @@ struct DoubleBuffer {
     current: AtomicU8
 }
 
-/// # Saftey
+/// # Safety
 /// Ensures that only one core writes to one buffer, while the other core reads from the other buffer. 
-/// [`AtomicU8`] and [`Ordering::Acquire`]/[`Ordering::Release`] provides nessasary synchronization.
+/// [`AtomicU8`] and [`Ordering::Acquire`]/[`Ordering::Release`] provides necessary synchronization.
 unsafe impl Sync for DoubleBuffer {}
 
 impl DoubleBuffer {
@@ -69,7 +69,7 @@ impl DoubleBuffer {
         }
     }
 
-    /// Writes data from provieded input buffer into the correct internal buffer.
+    /// Writes data from provided input buffer into the correct internal buffer.
     fn write(&self, data: &mut [u8; 10]) {
         let current = self.current.load(Ordering::Acquire);
         
@@ -109,7 +109,7 @@ fn main() -> ! {
     let timings = StandardDShotTimings::new(DSHOT_SPEED, PIO_CLOCK_HZ, UPDATE_RATE_HZ).expect("Failed to get DShot timings!");
     info!("Got DShot Timings!");
 
-    info!("Clock divider: {}", crate::config::dshot::PIO_CLOCK_DIVDER.to_num::<f32>());
+    info!("Clock divider: {}", crate::config::dshot::PIO_CLOCK_DIVIDER.to_num::<f32>());
     let program = generate_standard_dshot_program(&timings);
     info!("Generated DShot Program!");
 
@@ -197,7 +197,7 @@ fn main() -> ! {
                 #[cfg(feature = "dummy-telemetry")]
                 spawner
                     .spawn(crate::core1::dummy_telemetry_writer(uart_tx))
-                    .expect("Failed to spawn DShot dummy telmetry writer task!");
+                    .expect("Failed to spawn DShot dummy telemetry writer task!");
             })
         },
     );

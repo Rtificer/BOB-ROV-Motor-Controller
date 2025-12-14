@@ -30,10 +30,10 @@ macro_rules! impl_dshot_telemetry_task {
                 // info!("Telemetry data: {:?}", internal_buf);
 
                 let computed_crc = TelemetryFrame::compute_crc(&internal_buf[..9]);
-                let recieved_crc = internal_buf[9];
+                let received_crc = internal_buf[9];
 
                 if internal_buf[9] != computed_crc {
-                    warn!("Telemetry CRC missmatch! Expected {:08b}, got {:08b}. Attempting shift by one! Invalid telemetry frame: {:?}", computed_crc, recieved_crc, internal_buf);
+                    warn!("Telemetry CRC mismatch! Expected {:08b}, got {:08b}. Attempting shift by one! Invalid telemetry frame: {:?}", computed_crc, received_crc, internal_buf);
 
                     let mut single_byte = [0u8; 1];
                     if let Err(read_error) = $read_fn(&mut uart, &mut single_byte).await {
@@ -61,7 +61,7 @@ impl_dshot_telemetry_task!(uart::Blocking, blocking_read_async);
 #[cfg(feature = "dummy-telemetry")]
 impl_dshot_telemetry_task!(uart::Async, async_read_async);
 
-// Small async wrappers to allow for macro defintion 
+// Small async wrappers to allow for macro definition 
 // (maybe more code than copy+pasting dshot telemetry task at this point, but it does have a centralizing advantage)
 // always inlined so should be 0 overhead.
 #[cfg(not(feature = "dummy-telemetry"))]

@@ -42,7 +42,7 @@ pub mod i2c {
                 }
             }
 
-            /// Initilizes a new [`i2c_slave::Config`] object given the config values set in config module
+            /// Initializes a new [`i2c_slave::Config`] object given the config values set in config module
             pub fn new() -> i2c_slave::Config {
                 let mut config = i2c_slave::Config::default();
                 config.addr = $addr;
@@ -160,7 +160,7 @@ pub mod dshot {
                 pin: &Pin<'d, PIO>
             ) {
                 let mut config = pio::Config::<PIO>::default();
-                config.clock_divider = PIO_CLOCK_DIVDER;
+                config.clock_divider = PIO_CLOCK_DIVIDER;
 
                 config.set_set_pins(&[pin]);
                 config.set_out_pins(&[pin]);
@@ -172,7 +172,7 @@ pub mod dshot {
             pub const PIO_CLOCK_HZ: u32 = $pio_clock;
             pub const UPDATE_RATE_HZ: u32 = $update_rate;
 
-            pub const PIO_CLOCK_DIVDER: FixedU32<U8> = FixedU32::unwrapped_div(
+            pub const PIO_CLOCK_DIVIDER: FixedU32<U8> = FixedU32::unwrapped_div(
                 FixedU32::<U8>::const_from_int(PIO_CLOCK_HZ),
                 FixedU32::<U8>::const_from_int(DSHOT_SPEED.bit_rate_hz())
             );
@@ -206,7 +206,7 @@ pub mod telemetry {
     pub fn get_uart_config() -> uart::Config {
         let mut config = uart::Config::default();
 
-        // As per KISS ESC specfiication
+        // As per KISS ESC specification
         config.baudrate = 115_200; 
         config.data_bits = uart::DataBits::DataBits8;
         config.stop_bits = uart::StopBits::STOP1;
