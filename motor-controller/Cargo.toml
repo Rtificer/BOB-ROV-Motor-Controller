@@ -3,6 +3,7 @@ name = "motor-controller"
 version = "0.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
+build = "build.rs"
 
 [dependencies]
 embassy-rp = { workspace = true }
@@ -14,10 +15,17 @@ portable-atomic = { workspace = true }
 pastey = { workspace = true }
 static_cell = { workspace = true }
 embassy-executor = { workspace = true }
+defmt-rtt = { workspace = true }
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 static_assertions = "1.1.0"
 rp2040-dshot = { path = "../rp2040-dshot" }
 fixed = "1.29.0"
-defmt-rtt = "1.1.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
+
+[profile.release]
+debug = true
+
+[features]
+default = ["dummy-telemetry"]
+dummy-telemetry = []

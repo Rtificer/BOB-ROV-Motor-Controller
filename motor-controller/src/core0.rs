@@ -1,8 +1,8 @@
-use embassy_rp::peripherals::*;
+use embassy_rp::peripherals::{PIO0, PIO1};
 use rp2040_dshot::encoder::Command as DShotCommand;
 use rp2040_dshot::driver::{StandardDShotDriver, DShotDriver};
 use embassy_time::TimeoutError;
-use defmt::{error, warn};
+use defmt::{error, info, warn};
 use embassy_rp::i2c_slave::{self, I2cSlave};
 use embassy_rp::i2c;
 
@@ -46,9 +46,8 @@ async fn write_dshot(sms: &mut SmDriverBatch, buffer: &mut [u8; 2]) {
                 match write_error {
                     TimeoutError => error!("Write Dshot command timeout error!"),
                 }
-                return;
             }
-        })
+        });
     } else {
         // Handle as throttle
         let raw = u16::from_le_bytes([buffer[0], buffer[1]]);
@@ -60,18 +59,9 @@ async fn write_dshot(sms: &mut SmDriverBatch, buffer: &mut [u8; 2]) {
 
         for_each_driver!(sms, |driver| {
             if let Err(write_error) = driver.write_throttle(throttle, true).await {
-                match write_error {
-                    rp2040_dshot::Error::ThrottleBoundsError { throttle } => {
-                        error!("DShot throttle bounds error! throttle: {}", throttle)
-                    }
-                    rp2040_dshot::Error::TimeoutError(_) => {
-                        error!("Write DShot throttle timeout error!")
-                    }
-                    _ => error!("Unknown write DShot throttle error!"),
-                }
-                return;
+                handle_dshot_write_error(&write_error);
             }
-        })
+        });
     }
 }
 
@@ -100,12 +90,22 @@ fn handle_i2c_error(error: i2c_slave::Error) {
     }
 }
 
+fn handle_dshot_write_error(error: &rp2040_dshot::Error) {
+    match error {
+        rp2040_dshot::Error::ThrottleBoundsError { throttle } => error!("DShot throttle bounds error! throttle: {}", throttle),
+        rp2040_dshot::Error::TimeoutError(_) => error!("Write DShot throttle timeout error!"),
+        _ => error!("Unknown write DShot throttle error!"),
+    }
+}
+
 
 #[embassy_executor::task]
 pub async fn i2c_task(
     mut device: I2cSlave<'static, config::i2c::I2cPeripheral>,
     mut sms: SmDriverBatch,
 ) {
+    info!("Spawned core0 executor and telemetry task!");
+    
     let mut write_buffer = [0u8; 2];
     let mut telemetry_buffer = [0u8; 10];
 

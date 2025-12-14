@@ -30,6 +30,7 @@ pub mod i2c {
                 }
             }
             
+            /// Binds the i2c interrupt corresponding to the provided `i2c_peripheral`
             #[macro_export]
             macro_rules! bind_i2c_interrupt {
                 () => {
@@ -67,12 +68,15 @@ pub mod i2c {
 
 pub mod dshot {
     use static_assertions::assert_impl_all as assert_impl;
-    use embassy_rp::peripherals::*;
+    use embassy_rp::peripherals::{
+        PIN_2, PIN_3, PIN_4, PIN_5, PIN_6, PIN_7, PIN_8, PIN_9,
+        PIO0, PIO1
+    };
     use embassy_rp::pio::{self, Pio, PioPin, Pin, Instance, StateMachine};
     use rp2040_dshot::encoder::DShotSpeed;
     use embassy_rp::Peri;
     use fixed::FixedU32;
-    use fixed::types::extra::{U8, U4};
+    use fixed::types::extra::U8;
 
     
 
@@ -100,7 +104,8 @@ pub mod dshot {
             assert_impl!($bottom_back_right_pin: PioPin);
             assert_impl!($bottom_back_left_pin: PioPin);
 
-            /// Gets the correct dshot pins as defined by define_dshot_config!
+
+            /// Gets the correct dshot pins as defined by [`define_dshot_config!`]
             #[macro_export]
             macro_rules! get_dshot_pins {
                 ($peripherals:ident) => {
@@ -117,6 +122,7 @@ pub mod dshot {
                 }
             }
             
+            #[allow(clippy::too_many_arguments)]
             pub fn set_pio_config<'d>
             (
                 pio0: &mut Pio<'d, PIO0>, 
@@ -166,11 +172,9 @@ pub mod dshot {
             pub const PIO_CLOCK_HZ: u32 = $pio_clock;
             pub const UPDATE_RATE_HZ: u32 = $update_rate;
 
-            pub const PIO_CLOCK_DIVDER: FixedU32<U8> = FixedU32::<U8>::from_bits(
-                FixedU32::unwrapped_div(
-                    FixedU32::<U4>::const_from_int(PIO_CLOCK_HZ),
-                    FixedU32::<U4>::const_from_int(DSHOT_SPEED.bit_rate_hz())
-                ).to_bits() >> 4
+            pub const PIO_CLOCK_DIVDER: FixedU32<U8> = FixedU32::unwrapped_div(
+                FixedU32::<U8>::const_from_int(PIO_CLOCK_HZ),
+                FixedU32::<U8>::const_from_int(DSHOT_SPEED.bit_rate_hz())
             );
         };
     }     
@@ -184,52 +188,72 @@ pub mod dshot {
         bottom_front_left_pin: PIN_7,
         bottom_back_right_pin: PIN_8,
         bottom_back_left_pin: PIN_9,
-        dshot_speed: DShotSpeed::DShot1200,
-        pio_clock_hz: 19_200_000,
-        update_rate_hz: 1_000
+        dshot_speed: DShotSpeed::DShot300,
+        pio_clock_hz: 8_000_000,
+        update_rate_hz: 8_000
     }
 }
 
 pub mod telemetry {
     use static_assertions::assert_impl_all as assert_impl;
-    use embassy_rp::peripherals::*;
+    use embassy_rp::peripherals::{
+        PIN_13, PIN_20,
+        UART0, UART1
+    };
     use embassy_rp::uart;
-    use embassy_rp::peripherals::UART0; 
 
-    macro_rules! define_telemtry_config {
+
+    pub fn get_uart_config() -> uart::Config {
+        let mut config = uart::Config::default();
+
+        // As per KISS ESC specfiication
+        config.baudrate = 115_200; 
+        config.data_bits = uart::DataBits::DataBits8;
+        config.stop_bits = uart::StopBits::STOP1;
+        config.parity = uart::Parity::ParityNone;
+
+        config
+    }
+
+    macro_rules! define_telemetry_config {
         (
-            peripheral: $uart_peripheral:ty,
-            telemetry_pin: $telemetry_pin:ty,
-            dma_channel: $dma_channel: ty,
+            rx_peripheral: $uart_rx:ty,
+            rx_telemetry_pin: $rx_pin:ty,
+            rx_dma_channel: $dma_channel_rx: ty,
+            tx_peripheral: $uart_tx:ty,
+            tx_telemetry_pin: $tx_pin:ty,
+            tx_dma_channel: $dma_channel_tx:ty
         ) => {
-            // Assert that given telemetry pin is valid
-            assert_impl!($telemetry_pin: uart::RxPin<$uart_peripheral>);
+            // Assert that given telemetry pin(s) is valid
+            assert_impl!($rx_pin: uart::RxPin<$uart_rx>);
+            assert_impl!($tx_pin: uart::TxPin<$uart_tx>);
 
+            #[cfg(not(feature = "dummy-telemetry"))]
             #[macro_export]
             macro_rules! get_telemetry_peripherals {
                 ($peripherals:ident) => {
-                    ::pastey::paste!{ ($peripherals.[<$uart_peripheral>], $peripherals.[<$telemetry_pin>], $peripherals.[<$dma_channel>]) }
+                    ::pastey::paste!{ ($peripherals.[<$uart_rx>], $peripherals.[<$rx_pin>], $peripherals.[<$dma_channel_rx>]) }
                 }
             }
 
-            pub fn get_uart_config() -> uart::Config {
-                let mut config = uart::Config::default();
-
-                // As per KISS ESC specfiication
-                config.baudrate = 115200; 
-                config.data_bits = uart::DataBits::DataBits8;
-                config.stop_bits = uart::StopBits::STOP1;
-                config.parity = uart::Parity::ParityNone;
-
-                config
+            #[cfg(feature = "dummy-telemetry")]
+            #[macro_export]
+            macro_rules! get_telemetry_peripherals {
+                ($peripherals:ident) => {
+                    ::pastey::paste!{(
+                        $peripherals.[<$uart_rx>], $peripherals.[<$rx_pin>], $peripherals.[<$dma_channel_rx>],
+                        $peripherals.[<$uart_tx>], $peripherals.[<$tx_pin>], $peripherals.[<$dma_channel_tx>],
+                    )}
+                }
             }
 
+            /// Binds the UART interrupt corresponding to the provided `uart_rx`peripheral.
             #[macro_export]
             macro_rules! bind_telemetry_interrupt {
                 () => {
                     ::pastey::paste! { 
                         ::embassy_rp::bind_interrupts!(struct UartIrq {
-                            [<$uart_peripheral _IRQ>] => ::embassy_rp::uart::InterruptHandler<::embassy_rp::peripherals::$uart_peripheral>;
+                            [<$uart_rx _IRQ>] => ::embassy_rp::uart::InterruptHandler<::embassy_rp::peripherals::$uart_rx>;
                         });
                     }
                 }
@@ -237,9 +261,14 @@ pub mod telemetry {
         };
     }
 
-    define_telemtry_config! {
-        peripheral: UART0,
-        telemetry_pin: PIN_13,
-        dma_channel: DMA_CH0,
+    define_telemetry_config! {
+        rx_peripheral: UART0,
+        rx_telemetry_pin: PIN_13,
+        rx_dma_channel: DMA_CH0,
+
+        // The following three are only used when dummy telemetry feature is enabled
+        tx_peripheral: UART1,
+        tx_telemetry_pin: PIN_20,
+        tx_dma_channel: DMA_CH1
     }
 }

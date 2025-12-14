@@ -9,7 +9,7 @@ use embassy_rp::pio::{StateMachineRx, StateMachineTx};
 use embassy_rp::pio::{Instance, Irq, StateMachine};
 use embassy_sync::blocking_mutex::raw::NoopRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{Duration, TimeoutError, with_timeout};
+use embassy_time::{self, Duration, TimeoutError, with_timeout};
 use static_cell::StaticCell;
 
 
@@ -20,18 +20,25 @@ trait PrivateDShotDriver<
 >: Sized {
     type Variant: DShotVariant;
 
-    /// Returns a mutable reference to the Driver's StateMachineTx
+    /// Returns a mutable reference to the Driver's [`StateMachineTx`]
     fn tx(&mut self) -> &mut StateMachineTx<'d, PIO, SM>;
 
     /// Waits for FIFO TX to be ready or until 500us have elapsed
+    /// 
+    /// # Errors
+    /// 
+    /// Returns [`embassy_time::TimeOutError`] if 500us have elapsed without a ready FIFO TX register.
     #[allow(async_fn_in_trait)]
     async fn write_frame(&mut self, frame: Frame<Self::Variant>) -> Result<(), TimeoutError> {
-        with_timeout(Duration::from_micros(500), self.tx().wait_push(frame.inner() as u32)).await
+        with_timeout(Duration::from_micros(500), self.tx().wait_push(u32::from(frame.inner()))).await
     }
 
     /// Attempts to push frame data to the TX FIFO 
+    /// 
+    /// Returns true if successful, false otherwise.
+    #[must_use]
     fn try_write_frame(&mut self, frame: Frame<Self::Variant>) -> bool {
-        self.tx().try_push(frame.inner() as u32)
+        self.tx().try_push(u32::from(frame.inner()))
     }
 }
 
@@ -42,6 +49,12 @@ pub trait DShotDriver<
     const SM: usize
 >: PrivateDShotDriver<'d, PIO, SM>
 {
+    /// Writes a [`u16`] throttle value (0-1999) to DSHOT PIO machines, waiting until FIFO TX register is ready, or until 500us have elapsed.
+    /// 
+    /// # Errors
+    /// 
+    /// Returns [`crate::Error::ThrottleBoundsError`] when [`u16`] throttle value >= 200
+    /// Returns [`crate::Error::TimeoutError`] if 500us have elapsed without a ready FIFO TX register.
     #[allow(async_fn_in_trait)]
     async fn write_throttle(
         &mut self,
@@ -54,6 +67,12 @@ pub trait DShotDriver<
         Ok(PrivateDShotDriver::write_frame(self, frame).await?)
     }
 
+    /// Tries to writes a [`u16`] throttle value (0-1999) to DSHOT PIO machines, throwing [`crate::Error::TxTryPushFaliure`] when it is not available.
+    /// 
+    /// # Errors
+    /// 
+    /// Returns [`crate::Error::ThrottleBoundsError`] when [`u16`] throttle value >= 200
+    /// Returns [`crate::Error::TxTryPushFaliure`] if FIFO TX register is unavailable.
     fn try_write_throttle(
         &mut self,
         throttle: u16,
@@ -71,7 +90,7 @@ pub trait DShotDriver<
     async fn write_command(&mut self, command: Command, request_telemetry: bool) -> Result<(), TimeoutError>{
         let frame = Frame::<Self::Variant>::from_command(command, request_telemetry);
 
-        Ok(self.write_frame(frame).await?)
+        self.write_frame(frame).await
     }
 
     fn try_write_command(&mut self, command: Command, request_telemetry: bool) -> bool {
@@ -110,10 +129,10 @@ impl<'d, PIO: Instance, const SM: usize>
 impl<'d, PIO: Instance, const SM: usize>
     StandardDShotDriver<'d, PIO, SM>
 {
+    #[must_use]
     pub fn new(
         sm: StateMachine<'d, PIO, SM>,
     ) -> Self {
-        // Self::setup_config(common, &mut sm, pin, dshot_speed)?;
         Self {
             sm,
             _protocol: PhantomData,
@@ -152,9 +171,10 @@ impl<PIO: Instance, const SM: usize>
 {
     /// Reads the next telemetry value from the channel 
     /// 
-    /// If there are no messages in the channel, this method will wait until 500us have passed before returning [`crate::Error::TimeoutError`].
+    /// # Errors
     /// 
     /// Returns [`crate::Error::InvalidTelemetryChecksum`] if the crc checksum from read telemetry packet is invalid.
+    /// Returns [`crate::Error::TimeoutError`] if 500us seconds have elapsed with no messages in the channel.
     pub async fn read_telemetry<V: ERpmVarient>(&self) -> Result<V, crate::Error> {
         let raw = with_timeout(Duration::from_micros(500), self.channel.receive()).await?;
         V::from_raw(raw).ok_or(crate::Error::InvalidTelemetryChecksum)
@@ -162,8 +182,9 @@ impl<PIO: Instance, const SM: usize>
 
     /// Reads the next telemetry value from the channel 
     /// 
-    /// Returns [`crate::Error::TryReceiveError`] if the channel is empty.
+    /// # Errors
     /// 
+    /// Returns [`crate::Error::TryReceiveError`] if the channel is empty.
     /// Returns [`crate::Error::InvalidTelemetryChecksum`] if the crc checksum from read telemetry packet is invalid.
     pub fn try_read_telemerty<V: ERpmVarient>(&self) -> Result<V, crate::Error> {
         let raw = self.channel.try_receive()?;
@@ -171,7 +192,7 @@ impl<PIO: Instance, const SM: usize>
     }
 }
 
-/// Macro to generate BdDshotDriver::new() for each PIO and SM
+/// Macro to generate [`BdDshotDriver::new()`] for each PIO and SM
 macro_rules! impl_bd_dshot_driver {
     ($pio:ty, $sm:expr) => {
         pastey::paste! {
@@ -182,9 +203,11 @@ macro_rules! impl_bd_dshot_driver {
 
             impl BdDShotDriver<$pio, $sm>
             {
-                #[doc = "Creates a new BdDshot Driver instance for " $pio " and SM " $sm "."]
+                #[doc = "Creates a new [`BdDShotDriver`] instance for [`" $pio "`] and SM" $sm "."]
                 #[doc = ""]
-                #[doc = "If config generation fails from clock division conversion returns [`crate::Error::ClockDividerConversionError`]"]
+                #[doc = "# Errors"]
+                #[doc = ""]
+                #[doc = "Returns [`crate::Error::SpawnError`] if the ``erpm_reader_task`` fails to spawn."]
                 pub fn new(
                     mut sm: StateMachine<'static, $pio, $sm>,
                     irq: Irq<'static, $pio, $sm>,
@@ -286,14 +309,14 @@ fn decode_gcr(gcr: u32) -> Option<u16> {
     for shift in 1..=4 {
         let index = ((gcr >> (shift * 5)) & 0x1F) as usize;
         let nibble = GCR_DECODING_MAP[index]?;
-        result |= (nibble as u16) << (shift * 4)
+        result |= (u16::from(nibble)) << (shift * 4);
     }
     Some(result)
 }
 
-async fn erpm_reader_task_impl<'d, PIO: Instance, const SM: usize>(
+async fn erpm_reader_task_impl<PIO: Instance, const SM: usize>(
     mut irq: Irq<'static, PIO, SM>,
-    rx_ref: &'static mut StateMachineRx<'d, PIO, SM>,
+    rx_ref: &'static mut StateMachineRx<'_, PIO, SM>,
     channel: &'static Channel<NoopRawMutex, u16, 3>,
 ) {
     loop {
@@ -323,9 +346,9 @@ async fn erpm_reader_task_impl<'d, PIO: Instance, const SM: usize>(
             .is_err()
         {
             if channel.is_full() {
-                defmt::warn!("Failed to read erpm data from PIO {}: send channel is full! Is the chip overloaded?", SM)
+                defmt::warn!("Failed to read erpm data from PIO {}: send channel is full! Is the chip overloaded?", SM);
             } else {
-                defmt::warn!("Failed to read erpm data from PIO {}: unknown data send timeout", SM)
+                defmt::warn!("Failed to read erpm data from PIO {}: unknown data send timeout", SM);
             }
         }
     }
