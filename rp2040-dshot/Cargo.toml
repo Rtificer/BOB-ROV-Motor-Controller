@@ -1,8 +1,9 @@
 [package]
 name = "rp2040-dshot"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 license = "AGPL-3.0-or-later"
+authors = ["Alachie Yeager"]
 description = "DShot protocol implementation for RP2040 using PIO"
 keywords = ["embedded", "rp2040", "dshot", "esc", "pio"]
 categories = ["embedded", "no-std"]
