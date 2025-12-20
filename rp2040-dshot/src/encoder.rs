@@ -311,9 +311,9 @@ pub struct StandardERpmFrame {
 impl ERpmVarient for StandardERpmFrame {
     fn from_raw(raw: u16) -> Option<Self> {
         let crc_raw = Self::crc_from_raw(raw);
-        let crc_computer = Self::compute_crc(raw);
+        let crc_computed = Self::compute_crc(raw);
 
-        (crc_raw == crc_computer).then_some(Self {
+        (crc_raw == crc_computed).then_some(Self {
             shift: shift_from_raw(raw),
             base: base_from_raw(raw),
             crc: crc_raw,
@@ -487,7 +487,7 @@ impl ExtendedERpmFrame {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, defmt::Format)]
 pub struct TelemetryFrame {
     /// deg C
     temp: u8,

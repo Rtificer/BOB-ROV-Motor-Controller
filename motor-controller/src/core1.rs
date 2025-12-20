@@ -33,7 +33,7 @@ macro_rules! impl_dshot_telemetry_task {
                 let received_crc = internal_buf[9];
 
                 if internal_buf[9] != computed_crc {
-                    warn!("Telemetry CRC mismatch! Expected {:08b}, got {:08b}. Attempting shift by one! Invalid telemetry frame: {:?}", computed_crc, received_crc, internal_buf);
+                    warn!("Telemetry CRC mismatch! Expected {:08b}, got {:08b}. Attempting shift by one! Invalid telemetry frame: {}", computed_crc, received_crc, internal_buf);
 
                     let mut single_byte = [0u8; 1];
                     if let Err(read_error) = $read_fn(&mut uart, &mut single_byte).await {
@@ -50,6 +50,7 @@ macro_rules! impl_dshot_telemetry_task {
                 }
 
                 TELEMETRY_BUFFERS.write(&mut internal_buf);
+                // info!("Wrote {:?} into telemetry buffer!", internal_buf);
             }
         }
     };

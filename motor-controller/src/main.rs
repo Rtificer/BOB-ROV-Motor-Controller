@@ -12,11 +12,12 @@ use defmt::info;
 use embassy_executor::Executor;
 use embassy_rp::clocks::ClockConfig;
 use embassy_rp::config::Config as EmbassyConfig;
-use embassy_rp::i2c;
-use embassy_rp::i2c_slave::I2cSlave;
+// use embassy_rp::i2c;
+// use embassy_rp::i2c_slave::I2cSlave;
 use embassy_rp::multicore::{Stack, spawn_core1};
-use embassy_rp::peripherals::{I2C0, PIO0, PIO1};
+use embassy_rp::peripherals::{/*I2C0, */PIO0, PIO1};
 use embassy_rp::pio::{self, Pio};
+use embassy_rp::spi::Spi;
 use embassy_rp::uart::{self, UartRx};
 use embassy_rp::bind_interrupts;
 use rp2040_dshot::StandardDShotTimings;
@@ -43,7 +44,7 @@ bind_interrupts!(struct PioIrqs {
     PIO0_IRQ_0 => pio::InterruptHandler<PIO0>;
     PIO1_IRQ_0 => pio::InterruptHandler<PIO1>;
 });
-bind_i2c_interrupt!();
+// bind_i2c_interrupt!();
 bind_telemetry_interrupt!();
 
 
@@ -74,9 +75,8 @@ impl DoubleBuffer {
         let current = self.current.load(Ordering::Acquire);
         
         unsafe {
-            let buffers = *self.buffers.get();
-            let mut current_buf = buffers[current as usize];
-            current_buf.copy_from_slice(data);
+            let buffers = &mut *self.buffers.get();
+            buffers[current as usize].copy_from_slice(data);
         }
 
         // Switch buffer
@@ -96,6 +96,7 @@ fn enable_sms<'d>(pio0: &mut Pio<'d, PIO0>, pio1: &mut Pio<'d, PIO1>) {
     pio1.sm3.set_enable(true);
 }
 
+#[allow(clippy::too_many_lines)]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     info!("Started main task!");
@@ -147,16 +148,8 @@ fn main() -> ! {
     info!("Setup SM Configs!");
 
     enable_sms(&mut pio0, &mut pio1);
-    let sm_drivers = crate::core0::SmDriverBatch {
-        pio0_sm0: StandardDShotDriver::new(pio0.sm0),
-        pio0_sm1: StandardDShotDriver::new(pio0.sm1),
-        pio0_sm2: StandardDShotDriver::new(pio0.sm2),
-        pio0_sm3: StandardDShotDriver::new(pio0.sm3),
-        pio1_sm0: StandardDShotDriver::new(pio1.sm0),
-        pio1_sm1: StandardDShotDriver::new(pio1.sm1),
-        pio1_sm2: StandardDShotDriver::new(pio1.sm2),
-        pio1_sm3: StandardDShotDriver::new(pio1.sm3),
-    };
+    let sm_drivers = create_sm_driver_batch!(pio0, pio1);
+
     info!("Enabled SMs!");
 
     #[cfg(not(feature = "dummy-telemetry"))]
@@ -203,16 +196,49 @@ fn main() -> ! {
     );
 
 
-    let i2c_config = config::i2c::new();
-    let (i2c_peri, scl, sda) = get_i2c_peripherals!(p);
-    let i2c_device = I2cSlave::new(i2c_peri, scl, sda, I2cIrq, i2c_config);
+    // #[cfg(not(feature = "dummy-spi"))]
+    let spi_device = {
+        let (spi_peri, clk_pin, mosi_pin, miso_pin) = get_spi_peripherals!(p);
+        let spi_config = config::spi::new();
+        Spi::new_blocking(spi_peri, clk_pin, mosi_pin, miso_pin, spi_config)
+    };
 
-    info!("Setup I2C peripheral!");
+    // #[cfg(feature = "dummy-spi")]
+    // let (spi_device, dummy_spi_device) = {
+    //     let (
+    //         spi_peri, clk_pin, mosi_pin, miso_pin, dma_rx, dma_tx,
+    //         dummy_spi_peri, dummy_clk_pin, dummy_mosi_pin, dummy_miso_pin, dummy_dma_rx, dummy_dma_tx
+    //     ) = get_spi_peripherals!(p);
+    //     (
+    //         Spi::new(spi_peri, clk_pin, mosi_pin, miso_pin, dma_tx, dma_rx, config::spi::new()),
+    //         Spi::new(dummy_spi_peri, dummy_clk_pin, dummy_mosi_pin, dummy_miso_pin, dummy_dma_tx, dummy_dma_rx, config::spi::new())
+    //     )
+    // };
+    
+    info!("Setup SPI peripheral!");
 
     let core0_thread_executor = CORE0_THREAD_EXECUTOR.init(Executor::new());
     core0_thread_executor.run(|spawner| {
         spawner
-            .spawn(core0::i2c_task(i2c_device, sm_drivers))
-            .expect("Failed to spawn i2c task!");
-    }) 
+            .spawn(core0::spi_task(spi_device, sm_drivers))
+            .expect("Failed to spawn spi task!");
+
+        // #[cfg(feature = "dummy-spi")]
+        // spawner
+        //     .spawn(core0::dummy_spi_controller(dummy_spi_device))
+        //     .expect("Failed to spawn SPI dummy controller task!");
+    })
+
+    // let i2c_config = config::i2c::new();
+    // let (i2c_peri, scl, sda) = get_i2c_peripherals!(p);
+    // let i2c_device = I2cSlave::new(i2c_peri, scl, sda, I2cIrq, i2c_config);
+
+    // info!("Setup I2C peripheral!");
+
+    // let core0_thread_executor = CORE0_THREAD_EXECUTOR.init(Executor::new());
+    // core0_thread_executor.run(|spawner| {
+    //     spawner
+    //         .spawn(core0::i2c_task(i2c_device, sm_drivers))
+    //         .expect("Failed to spawn i2c task!");
+    // }) 
 }

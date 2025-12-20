@@ -29,3 +29,4 @@ debug = true
 [features]
 default = ["dummy-telemetry"]
 dummy-telemetry = []
+# dummy-spi = []
