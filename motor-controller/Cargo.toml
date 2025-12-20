@@ -21,7 +21,7 @@ cortex-m-rt = "0.7.5"
 static_assertions = "1.1.0"
 fixed = "1.29.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
-rp2040-dshot = { version = "0.0.4", features = ["driver"] }
+rp2040-dshot = { version = "0.0.3", features = ["driver"] }
 
 [profile.release]
 debug = true
