@@ -19,7 +19,6 @@ defmt-rtt = { workspace = true }
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 static_assertions = "1.1.0"
-rp2040-dshot = { path = "../rp2040-dshot" }
 fixed = "1.29.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
 
