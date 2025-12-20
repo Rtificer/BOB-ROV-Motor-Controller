@@ -4,13 +4,21 @@
 //! VERY ALPHA, BDDShot features have not been tested and likely do not work.
 
 #![no_std]
+
+#[cfg(feature = "driver")]
 pub mod program;
+#[cfg(feature = "driver")]
+pub use program::StandardDShotTimings as StandardDShotTimings;
+#[cfg(feature = "driver")]
+pub use program::BdDShotTimings as BdDShotTimings;
+#[cfg(feature = "driver")]
 pub mod driver;
+
 
 pub mod encoder;
 
-pub use program::StandardDShotTimings as StandardDShotTimings;
-pub use program::BdDShotTimings as BdDShotTimings;
+
+
 
 #[derive(Debug, Clone, thiserror_no_std::Error)]
 pub enum Error {
