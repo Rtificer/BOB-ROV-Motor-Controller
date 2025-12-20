@@ -1,6 +1,6 @@
 [package]
 name = "rp2040-dshot"
-version = "0.0.3"
+version = "0.0.4"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 authors = ["Alachie Yeager"]
@@ -25,10 +25,10 @@ num_enum = { version = "0.7.5", default-features = false }
 [target.'cfg(all(target_arch = "arm", target_os = "none"))'.dependencies]
 portable-atomic = { version = "1.1.1", features = [
     "unsafe-assume-single-core",
-] }
+], optional = true}
 
 [features]
-default = ["driver"]
+default = []
 driver = [
     "embassy-rp",
     "embassy-time",
@@ -38,5 +38,5 @@ driver = [
     "embassy-sync",
     "embassy-executor",
     "pastey",
-    "pio"
+    "pio",
 ]
