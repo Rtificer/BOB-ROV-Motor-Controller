@@ -13,7 +13,7 @@ pub use program::BdDShotTimings as BdDShotTimings;
 #[cfg(feature = "driver")]
 pub mod driver;
 
-mod encoder;
+pub mod encoder;
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "thiserror", derive(thiserror_no_std::Error))]

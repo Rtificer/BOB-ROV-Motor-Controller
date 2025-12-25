@@ -35,7 +35,7 @@ cortex-m-rt = "0.7.5"
 static_assertions = "1.1.0"
 fixed = "1.29.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
-rp2040-dshot = { version = "0.0.5", features = ["driver", "defmt"] }
+rp2040-dshot = { version = "0.0.7", features = ["driver", "defmt", "defmt-logging"] }
 rp2040-hal = "0.11.0"
 rp2040-pac = { version = "0.6.0", features = [
     "cortex-m-rt",
