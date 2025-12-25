@@ -324,12 +324,14 @@ async fn erpm_reader_task_impl<PIO: Instance, const SM: usize>(
             .await
             .is_err()
         {
+            #[cfg(feature = "defmt-logging")]
             defmt::error!("Failed to read erpm data from PIO {}: irq flag timeout", SM);
             continue;
         }
         
 
         let Some(value) = rx_ref.try_pull() else {
+            #[cfg(feature = "defmt-logging")]
             defmt::error!("Failed to read erpm data from PIO {}: rx pull failed", SM);
             continue;
         };
@@ -337,6 +339,7 @@ async fn erpm_reader_task_impl<PIO: Instance, const SM: usize>(
         let gcr = value ^ (value >> 1);
 
         let Some(data) = decode_gcr(gcr) else {
+            #[cfg(feature = "defmt-logging")]
             defmt::error!("Failed to read erpm data from PIO {}: gcr decode failed", SM);
             continue;
         };
@@ -346,8 +349,10 @@ async fn erpm_reader_task_impl<PIO: Instance, const SM: usize>(
             .is_err()
         {
             if channel.is_full() {
+                #[cfg(feature = "defmt-logging")]
                 defmt::warn!("Failed to read erpm data from PIO {}: send channel is full! Is the chip overloaded?", SM);
             } else {
+                #[cfg(feature = "defmt-logging")]
                 defmt::warn!("Failed to read erpm data from PIO {}: unknown data send timeout", SM);
             }
         }

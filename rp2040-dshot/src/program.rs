@@ -25,24 +25,32 @@ impl BitTimingDelays {
 
         // Protocol spec says 0.75 and 0.375, use 0.6 and 0.3 for safety margin
         let one_high = (bit_period * 3) / 5; // 60%
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("one_high: {}", one_high);
         let zero_high = (bit_period * 3) / 10; // 30%
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("zero_high: {}", zero_high);
         
         let one_low = bit_period - one_high;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("one_low: {}", one_low);
         let zero_low = bit_period - zero_high;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("zero_low: {}", zero_low);
 
         // 1 instruction = one cycle, overhead in cycles
         // Adjust for PIO instruction overhead
         let one_high_delay = u8::try_from(one_high)? - HIGH_INSTRUCTION_OVERHEAD;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("one_high_delay: {}", one_high_delay);
         let zero_high_delay = u8::try_from(zero_high)? - HIGH_INSTRUCTION_OVERHEAD;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("zero_high_delay: {}", zero_high_delay);
         let one_low_delay = u8::try_from(one_low)? - LOW_INSTRUCTION_OVERHEAD;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("one_low_delay: {}", one_low_delay);
         let zero_low_delay = u8::try_from(zero_low)? - LOW_INSTRUCTION_OVERHEAD;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("zero_low_delay: {}", zero_low_delay);
 
         Ok(BitTimingDelays {
@@ -77,13 +85,16 @@ impl FrameTimingDelays {
 
         // Frame padding
         let frame_period = pio_clock / update_rate; // Cycles per frame
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("frame_period: {}", frame_period);
         let bit_transmission_time = bit_period * BITS_PER_FRAME;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("bit_transmission_time: {}", bit_transmission_time);
 
         let frame_delay_total = frame_period 
             - bit_transmission_time 
             - FRAME_OVERHEAD;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("frame_delay_total: {}", frame_delay_total);
         
         Self::from_total_delay(frame_delay_total)
@@ -137,15 +148,19 @@ impl FrameTimingDelays {
         const MAX_PIO_DELAY: u32 = 32;
 
         let frame_delay_count = u8::try_from(frame_delay_total / MAX_PIO_DELAY)?;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("frame_delay_count: {}", frame_delay_count);
         let frame_delay_remainder_raw = (frame_delay_total % MAX_PIO_DELAY) as u8;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("frame_delay_remainder_raw: {}", frame_delay_remainder_raw);
         #[allow(clippy::cast_possible_truncation)] // Cannot truncate since 
         let frame_delay_remainder = frame_delay_remainder_raw - FRAME_SETUP_OVERHEAD;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("frame_delay_remainder: {}", frame_delay_remainder);
 
         // For the frame_delay section
         let frame_delay = ((frame_delay_total / MAX_PIO_DELAY) % MAX_PIO_DELAY) as u8;
+        #[cfg(feature = "defmt-logging")]
         defmt::info!("frame_delay: {}", frame_delay);
 
         Ok(FrameTimingDelays {

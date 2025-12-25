@@ -488,7 +488,7 @@ impl ExtendedERpmFrame {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "driver", derive(defmt::Format))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TelemetryFrame {
     /// deg C
     temp: u8,

@@ -2,7 +2,6 @@
 //! 
 //! Has support for both regular and BDDshot, as well as ESC telemetry, and extended BDDshot telemetry frames
 //! VERY ALPHA, BDDShot features have not been tested and likely do not work.
-
 #![no_std]
 
 #[cfg(feature = "driver")]
@@ -14,44 +13,63 @@ pub use program::BdDShotTimings as BdDShotTimings;
 #[cfg(feature = "driver")]
 pub mod driver;
 
+mod encoder;
 
-pub mod encoder;
-
-
-
-
-#[derive(Debug, Clone, thiserror_no_std::Error)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "thiserror", derive(thiserror_no_std::Error))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Error {
     /// Throttle command must be in the range 0-1999
-    #[error("Throttle command must be in the range 0-1999, was {throttle}")]
+    #[cfg(feature = "driver")]
+    #[cfg_attr(feature = "thiserror", error("Throttle command must be in the range 0-1999, was {throttle}"))]
     ThrottleBoundsError { throttle: u16 },
     /// Clock divider conversion from float to fixed failed in clock divisor calculation.
     #[cfg(feature = "driver")]
-    #[error("Conversion from float to fixed failed in clock divider calculation. Float value: {}", clock_divider_float)]
+    #[cfg_attr(feature = "thiserror", error("Conversion from float to fixed failed in clock divider calculation. Float value: {}", clock_divider_float))]
     ClockDividerConversionError { clock_divider_float: f32 },
     /// Failed to spawn task.
     #[cfg(feature = "driver")]
-    #[error("Failed to spawn task")]
-    SpawnError(#[from] embassy_executor::SpawnError),
+    #[cfg_attr(feature = "thiserror", error("Failed to spawn task"))]
+    SpawnError(embassy_executor::SpawnError),
     /// Failed to recieve value from channel.
     #[cfg(feature = "driver")]
-    #[error("Failed to recieve value from channel")]
-    TryReceiveError(#[from] embassy_sync::channel::TryReceiveError),
+    #[cfg_attr(feature = "thiserror", error("Failed to recieve value from channel"))]
+    TryReceiveError(embassy_sync::channel::TryReceiveError),
     /// Driver future timed out
     #[cfg(feature = "driver")]
-    #[error("Driver future timed out")]
-    TimeoutError(#[from] embassy_time::TimeoutError),
+    #[cfg_attr(feature = "thiserror", error("Driver future timed out"))]
+    TimeoutError(embassy_time::TimeoutError),
     /// Invalid ERPM telemerty checksum.
     #[cfg(feature = "driver")]
-    #[error("Invalid ERPM telemetry checksum")]
+    #[cfg_attr(feature = "thiserror", error("Invalid ERPM telemetry checksum"))]
     InvalidTelemetryChecksum,
     /// TX Push Faliure
     #[cfg(feature = "driver")]
-    #[error("TX Push Faliure")]
+    #[cfg_attr(feature = "thiserror", error("TX Push Faliure"))]
     TxTryPushFaliure,
     #[cfg(feature = "driver")]
     /// State machine split faliure, empty pointer!
-    #[error("SM Split Faliure, empty pointer!")]
+    #[cfg_attr(feature = "thiserror", error("SM Split Faliure, empty pointer!"))]
     SmSplitFaliure,
 }
 
+#[cfg(feature = "driver")]
+impl From<embassy_executor::SpawnError> for Error {
+    fn from(e: embassy_executor::SpawnError) -> Self {
+        Error::SpawnError(e)
+    }
+}
+
+#[cfg(feature = "driver")]
+impl From<embassy_sync::channel::TryReceiveError> for Error {
+    fn from(e: embassy_sync::channel::TryReceiveError) -> Self {
+        Error::TryReceiveError(e)
+    }
+}
+
+#[cfg(feature = "driver")]
+impl From<embassy_time::TimeoutError> for Error {
+    fn from(e: embassy_time::TimeoutError) -> Self {
+        Error::TimeoutError(e)
+    }
+}

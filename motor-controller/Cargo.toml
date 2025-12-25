@@ -6,22 +6,42 @@ license = "AGPL-3.0-or-later"
 build = "build.rs"
 
 [dependencies]
-embassy-rp = { workspace = true }
-embassy-time = { workspace = true }
-defmt = { workspace = true }
-thiserror-no-std = { workspace = true }
-embassy-sync = { workspace = true }
-portable-atomic = { workspace = true }
-pastey = { workspace = true }
-static_cell = { workspace = true }
-embassy-executor = { workspace = true }
-defmt-rtt = { workspace = true }
+embassy-rp = { version = "0.9.0 ", features = [
+    "intrinsics",
+    "rp2040",
+    "critical-section-impl",
+    "defmt",
+    "time-driver",
+] }
+embassy-time = { version = "0.5.0", features = [
+  "defmt",
+  "defmt-timestamp-uptime",
+] }
+
+embassy-executor = { version = "0.9.1", features = [
+  "defmt",
+  "arch-cortex-m",
+  "executor-thread",
+  "executor-interrupt",
+] }
+thiserror-no-std = "2.0.2"
+defmt-rtt = "1.1.0"
+defmt = "1.0.1"
+static_cell = "2.1.1"
+portable-atomic = "1.11.1"
+pastey = "0.2.1"
 cortex-m = "0.7.7"
 cortex-m-rt = "0.7.5"
 static_assertions = "1.1.0"
 fixed = "1.29.0"
 panic-probe = { version = "1.0.0", features = ["print-defmt"] }
-rp2040-dshot = { version = "0.0.3", features = ["driver"] }
+rp2040-dshot = { version = "0.0.5", features = ["driver", "defmt"] }
+rp2040-hal = "0.11.0"
+rp2040-pac = { version = "0.6.0", features = [
+    "cortex-m-rt",
+    "critical-section",
+] }
+embedded-hal = { version = "1.0.0" }
 
 [profile.release]
 debug = true
@@ -29,4 +49,4 @@ debug = true
 [features]
 default = ["dummy-telemetry"]
 dummy-telemetry = []
-# dummy-spi = []
+
