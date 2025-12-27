@@ -1,7 +1,9 @@
 #![no_std]
 #![no_main]
 
-mod config;
+mod spi;
+mod dshot;
+mod telemetry;
 mod core0;
 mod core1;
 
@@ -12,12 +14,9 @@ use defmt::info;
 use embassy_executor::Executor;
 use embassy_rp::clocks::ClockConfig;
 use embassy_rp::config::Config as EmbassyConfig;
-// use embassy_rp::i2c;
-// use embassy_rp::i2c_slave::I2cSlave;
 use embassy_rp::multicore::{Stack, spawn_core1};
 use embassy_rp::peripherals::{/*I2C0, */PIO0, PIO1};
 use embassy_rp::pio::{self, Pio};
-use embassy_rp::spi::Spi;
 use embassy_rp::uart::{self, UartRx};
 use embassy_rp::bind_interrupts;
 use rp2040_dshot::StandardDShotTimings;
@@ -28,7 +27,6 @@ use static_cell::StaticCell;
 use panic_probe as _;
 use defmt_rtt as _;
 
-use crate::config::dshot::{DSHOT_SPEED, PIO_CLOCK_HZ, UPDATE_RATE_HZ};
 
 
 static mut CORE1_STACK: Stack<4096> = Stack::new();
@@ -39,13 +37,15 @@ static TELEMETRY_BUFFERS: DoubleBuffer = DoubleBuffer {
     current: AtomicU8::new(0)
 };
 
+
+
 // Bind hardware interrupts
 bind_interrupts!(struct PioIrqs {
     PIO0_IRQ_0 => pio::InterruptHandler<PIO0>;
     PIO1_IRQ_0 => pio::InterruptHandler<PIO1>;
 });
-// bind_i2c_interrupt!();
 bind_telemetry_interrupt!();
+
 
 
 /// Double buffered telemetry so writer never blocks reader (vroom vroom)
@@ -84,7 +84,6 @@ impl DoubleBuffer {
     }
 }
 
-
 fn enable_sms<'d>(pio0: &mut Pio<'d, PIO0>, pio1: &mut Pio<'d, PIO1>) {
     pio0.sm0.set_enable(true);
     pio0.sm1.set_enable(true);
@@ -96,7 +95,8 @@ fn enable_sms<'d>(pio0: &mut Pio<'d, PIO0>, pio1: &mut Pio<'d, PIO1>) {
     pio1.sm3.set_enable(true);
 }
 
-#[allow(clippy::too_many_lines)]
+
+
 #[cortex_m_rt::entry]
 fn main() -> ! {
     info!("Started main task!");
@@ -107,10 +107,15 @@ fn main() -> ! {
     let p = embassy_rp::init(embassy_config);
     info!("Fetched RP2040 peripherals!");
 
-    let timings = StandardDShotTimings::new(DSHOT_SPEED, PIO_CLOCK_HZ, UPDATE_RATE_HZ).expect("Failed to get DShot timings!");
+    let timings = StandardDShotTimings::new(
+        crate::dshot::DSHOT_SPEED, 
+        crate::dshot::PIO_CLOCK_HZ, 
+        crate::dshot::UPDATE_RATE_HZ
+    ).expect("Failed to get DShot timings!");
+
     info!("Got DShot Timings!");
 
-    info!("Clock divider: {}", crate::config::dshot::PIO_CLOCK_DIVIDER.to_num::<f32>());
+    info!("Clock divider: {}", crate::dshot::PIO_CLOCK_DIVIDER.to_num::<f32>());
     let program = generate_standard_dshot_program(&timings);
     info!("Generated DShot Program!");
 
@@ -133,7 +138,7 @@ fn main() -> ! {
         bottom_back_left_pin,
     ) = get_dshot_pins!(p);
 
-    config::dshot::set_pio_config(
+    dshot::set_pio_config(
         &mut pio0,
         &mut pio1,
         top_front_right_pin,
@@ -156,7 +161,7 @@ fn main() -> ! {
     let uart_rx = {
         use uart::Blocking;
         let (uart_peri, telemetry_pin, dma_channel) = get_telemetry_peripherals!(p);
-        let uart_config = config::telemetry::get_uart_config();
+        let uart_config = telemetry::get_uart_config();
         UartRx::<Blocking>::new(uart_peri, telemetry_pin, UartIrq, dma_channel, uart_config)
     };
 
@@ -167,7 +172,7 @@ fn main() -> ! {
             uart_peri_rx, telemetry_pin_rx, dma_channel_rx,
             uart_peri_tx, telemetry_pin_tx, dma_channel_tx
         ) = get_telemetry_peripherals!(p);
-        let uart_config = config::telemetry::get_uart_config();
+        let uart_config = telemetry::get_uart_config();
 
         (
             UartRx::<Async>::new(uart_peri_rx, telemetry_pin_rx, UartIrq, dma_channel_rx, uart_config),
@@ -195,50 +200,16 @@ fn main() -> ! {
         },
     );
 
-
-    // #[cfg(not(feature = "dummy-spi"))]
-    let spi_device = {
-        let (spi_peri, clk_pin, mosi_pin, miso_pin) = get_spi_peripherals!(p);
-        let spi_config = config::spi::new();
-        Spi::new_blocking(spi_peri, clk_pin, mosi_pin, miso_pin, spi_config)
-    };
-
-    // #[cfg(feature = "dummy-spi")]
-    // let (spi_device, dummy_spi_device) = {
-    //     let (
-    //         spi_peri, clk_pin, mosi_pin, miso_pin, dma_rx, dma_tx,
-    //         dummy_spi_peri, dummy_clk_pin, dummy_mosi_pin, dummy_miso_pin, dummy_dma_rx, dummy_dma_tx
-    //     ) = get_spi_peripherals!(p);
-    //     (
-    //         Spi::new(spi_peri, clk_pin, mosi_pin, miso_pin, dma_tx, dma_rx, config::spi::new()),
-    //         Spi::new(dummy_spi_peri, dummy_clk_pin, dummy_mosi_pin, dummy_miso_pin, dummy_dma_tx, dummy_dma_rx, config::spi::new())
-    //     )
-    // };
-    
+    // Embassy doesn't have SPI slave impementation, so we're working directly with the RP2040 PAC and HAL
+    spi::configure();
+    // Setup select pin
+    let cs_pin = get_spi_cs_pin!(p);
     info!("Setup SPI peripheral!");
 
     let core0_thread_executor = CORE0_THREAD_EXECUTOR.init(Executor::new());
     core0_thread_executor.run(|spawner| {
         spawner
-            .spawn(core0::spi_task(spi_device, sm_drivers))
+            .spawn(core0::spi_task(cs_pin, sm_drivers))
             .expect("Failed to spawn spi task!");
-
-        // #[cfg(feature = "dummy-spi")]
-        // spawner
-        //     .spawn(core0::dummy_spi_controller(dummy_spi_device))
-        //     .expect("Failed to spawn SPI dummy controller task!");
     })
-
-    // let i2c_config = config::i2c::new();
-    // let (i2c_peri, scl, sda) = get_i2c_peripherals!(p);
-    // let i2c_device = I2cSlave::new(i2c_peri, scl, sda, I2cIrq, i2c_config);
-
-    // info!("Setup I2C peripheral!");
-
-    // let core0_thread_executor = CORE0_THREAD_EXECUTOR.init(Executor::new());
-    // core0_thread_executor.run(|spawner| {
-    //     spawner
-    //         .spawn(core0::i2c_task(i2c_device, sm_drivers))
-    //         .expect("Failed to spawn i2c task!");
-    // }) 
 }
