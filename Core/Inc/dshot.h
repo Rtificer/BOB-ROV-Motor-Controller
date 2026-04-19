@@ -35,8 +35,8 @@
       100)
 #define DSHOT_INPUT_BUF_LEN ROUND_DIV(DSHOT_SAMPLE_WINDOW_US *DSHOT_INPUT_SAMPLE_RATE, 1000000UL)
 
-extern volatile uint32_t cmd_ccr_tim1_buf[2][16][4];
-extern volatile uint32_t cmd_ccr_tim8_buf[2][16][4];
+extern volatile uint32_t cmd_ccr_tim1_buf[2][17][4];
+extern volatile uint32_t cmd_ccr_tim8_buf[2][17][4];
 extern volatile uint8_t cmd_ccr_front;
 extern volatile uint16_t tim1_idr_buf[2][DSHOT_INPUT_BUF_LEN];
 extern volatile uint16_t tim8_idr_buf[2][DSHOT_INPUT_BUF_LEN];
@@ -45,15 +45,16 @@ extern volatile bool new_tim8_idr_data;
 
 void build_dshot_frames(
     const uint16_t words[8],
-    uint32_t tim1_buf[16][4],
-    uint32_t tim8_buf[16][4]);
+    uint32_t tim1_buf[17][4],
+    uint32_t tim8_buf[17][4]);
 void setup_dshot_pins(void);
 void setup_dshot_timer(TIM_TypeDef *timer);
 void calculate_erpm_idr_parsing_constants(void);
-void configure_dshot_output_dma(
+inline void configure_dshot_output_dma(
     DMA_Stream_TypeDef *stream,
+    IRQn_Type irq,
     TIM_TypeDef *timer,
-    uint32_t timer_ccr_buf[16][4],
+    uint32_t timer_ccr_buf[17][4],
     uint8_t channel);
 void process_timer_idr_data(
     uint8_t bit_offset,

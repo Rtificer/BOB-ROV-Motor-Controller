@@ -4,11 +4,28 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// 75% period
+#define DSHOT_BIT1_CCR ROUND_DIV(DSHOT_OUTPUT_BIT_LENGTH_CYCLES * 3, 4)
+// 37.5% period
+#define DSHOT_BIT0_CCR ROUND_DIV(DSHOT_OUTPUT_BIT_LENGTH_CYCLES * 3, 8)
+
+#define DSHOT_OUTPUT_BIT_LENGTH_CYCLES ROUND_DIV(SYS_CLK_FREQ, DSHOT_OUTPUT_BITRATE)
+// account for 0 value of counter
+#define DSHOT_OUTPUT_ARR (DSHOT_OUTPUT_BIT_LENGTH_CYCLES - 1)
+
 #define ERPM_START_MARGIN_US 5
 
 #define TIM1_MODER_MASK                                                                            \
-  ~(GPIO_MODER_MODE8 | GPIO_MODER_MODE9 | GPIO_MODER_MODE10 | GPIO_MODER_MODE11)
-#define TIM8_MODER_MASK ~(GPIO_MODER_MODE6 | GPIO_MODER_MODE7 | GPIO_MODER_MODE8 | GPIO_MODER_MODE9)
+  (~(GPIO_MODER_MODE8 | GPIO_MODER_MODE9 | GPIO_MODER_MODE10 | GPIO_MODER_MODE11))
+#define TIM8_MODER_MASK                                                                            \
+  (~(GPIO_MODER_MODE6 | GPIO_MODER_MODE7 | GPIO_MODER_MODE8 | GPIO_MODER_MODE9))
+
+#define TIM1_MODER_ALT_FUNC_MODE                                                                   \
+  ((2 << GPIO_MODER_MODE8_Pos) | (2 << GPIO_MODER_MODE9_Pos) | (2 << GPIO_MODER_MODE10_Pos) |      \
+   (2 << GPIO_MODER_MODE11_Pos))
+#define TIM8_MODER_ALT_FUNC_MODE                                                                   \
+  ((2 << GPIO_MODER_MODE6_Pos) | (2 << GPIO_MODER_MODE7_Pos) | (2 << GPIO_MODER_MODE8_Pos) |       \
+   (2 << GPIO_MODER_MODE9_Pos))
 
 #define DSHOT_TELEMETRY_INVALID (0xffff)
 #define DSHOT_TELEMENTRY_NOEDGE (0xfffe)
@@ -26,12 +43,18 @@
   (ERPM_MARGIN_CHECK_INTERVAL_US * (SYS_CLK_FREQ / 1000000U))
 #define ERPM_START_MARGIN_CYCLES (ERPM_START_MARGIN_US * (SYS_CLK_FREQ / 1000000U))
 
-volatile uint32_t cmd_ccr_tim1_buf[2][16][4];
-volatile uint32_t cmd_ccr_tim8_buf[2][16][4];
+#define DSHOT_UPDATE_RATE_HZ 8000
+#define DSHOT_UPDATE_PERIOD_CYCLES ROUND_DIV(SYS_CLK_FREQ, DSHOT_UPDATE_RATE_HZ)
+#define DSHOT_UPDATE_ARR (DSHOT_UPDATE_PERIOD_CYCLES - 1)
+
+volatile uint32_t cmd_ccr_tim1_buf[2][17][4] = {0};
+volatile uint32_t cmd_ccr_tim8_buf[2][17][4] = {0};
 volatile uint16_t tim1_idr_buf[2][DSHOT_INPUT_BUF_LEN];
 volatile uint16_t tim8_idr_buf[2][DSHOT_INPUT_BUF_LEN];
 volatile bool new_tim1_idr_data = false;
 volatile bool new_tim8_idr_data = false;
+static volatile uint8_t tim1_idr_buf_front = 0;
+static volatile uint8_t tim8_idr_buf_front = 0;
 
 static inline uint8_t dshot_crc(uint16_t data)
 {
@@ -39,7 +62,7 @@ static inline uint8_t dshot_crc(uint16_t data)
 }
 
 inline void
-build_dshot_frames(const uint16_t words[8], uint32_t tim1_buf[16][4], uint32_t tim8_buf[16][4])
+build_dshot_frames(const uint16_t words[8], uint32_t tim1_buf[17][4], uint32_t tim8_buf[17][4])
 {
   for (uint8_t ch = 0; ch < 4; ++ch) {
     // Shift right by five leaves room for crc
@@ -71,12 +94,10 @@ inline void setup_dshot_pins(void)
   // Set DShot pins to alternate function mode
   // [RM0090 8.3.7 & Figure 26, DS8626 Table 7]
   GPIOA->MODER &= TIM1_MODER_MASK;
-  GPIOA->MODER |= (2 << GPIO_MODER_MODE8_Pos) | (2 << GPIO_MODER_MODE9_Pos) |
-                  (2 << GPIO_MODER_MODE10_Pos) | (2 << GPIO_MODER_MODE11_Pos);
+  GPIOA->MODER |= TIM1_MODER_ALT_FUNC_MODE;
 
   GPIOC->MODER &= TIM8_MODER_MASK;
-  GPIOC->MODER |= (2 << GPIO_MODER_MODE6_Pos) | (2 << GPIO_MODER_MODE7_Pos) |
-                  (2 << GPIO_MODER_MODE8_Pos) | (2 << GPIO_MODER_MODE9_Pos);
+  GPIOC->MODER |= TIM1_MODER_ALT_FUNC_MODE;
 
   // Set DShot pins to correct alternate funciton
   // [RM0090 8.3.7 & Figure 26, DS8626 Table 7]
@@ -151,8 +172,10 @@ static inline void configure_dshot_output_internal(
   stream->PAR = (uint32_t)&timer->DMAR;
   // Set buffer pointer
   stream->M0AR = (uint32_t)timer_ccr_buf;
-  // Total of 64 transfers (4 channels * 16 bits)
-  stream->NDTR = 64;
+  // Total of 68 transfers (4 channels * 17 bits)
+  // would be 64, but the transfer complete interrupt fires on the *start* of the last bit.
+  // so we add a dummy bit to actually fire at the end of the last meaningful piece of data;
+  stream->NDTR = 68;
   stream->FCR = DMA_SxFCR_DMDIS             // Disable direct mode
                 | (3 << DMA_SxFCR_FTH_Pos); // Set full fifo Size
 }
@@ -172,20 +195,26 @@ static inline void configure_dshot_output_internal(
 
 inline void configure_dshot_output_dma(
     DMA_Stream_TypeDef *stream,
+    IRQn_Type irq,
     TIM_TypeDef *timer,
-    uint32_t timer_ccr_buf[16][4],
+    uint32_t timer_ccr_buf[17][4],
     uint8_t channel)
 {
+  NVIC_SetPriority(irq, 2);
+  NVIC_EnableIRQ(irq);
+
   configure_dshot_output_internal(stream, timer, timer_ccr_buf);
   stream->CR = DSHOT_OUTPUT_DMA_CR_CONFIG(channel);
 }
 
 inline void switch_to_dshot_output_dma(
+    uint8_t *idr_buf_front,
     DMA_Stream_TypeDef *stream,
     TIM_TypeDef *timer,
-    uint32_t timer_ccr_buf[16][4],
+    uint32_t timer_ccr_buf[17][4],
     uint8_t channel)
 {
+  *idr_buf_front = (stream->CR >> DMA_SxCR_CT_Pos) & 1;
   configure_dshot_output_internal(stream, timer, timer_ccr_buf);
 
   stream->CR &= DMA_SxCR_CT;
@@ -209,27 +238,29 @@ inline void configure_dshot_input_internal(
   stream->FCR = 0; // Enable direct mode
 }
 
-#define DMA_INPUT_DMA_CR_CONFIG(channel)                                                           \
-  (DMA_SxCR_EN                         /*Enable Stream*/                                           \
-   | DMA_SxCR_TCIE                     /*Enable transfer complete interrupt*/                      \
-   | (0 << DMA_SxCR_DIR_Pos)           /*Peripheral to Memory*/                                    \
-   | DMA_SxCR_MINC                     /*Enable memory increment mode*/                            \
-   | (1 << DMA_SxCR_PSIZE_Pos)         /*Set 16-bit peripheral data size*/                         \
-   | (1 << DMA_SxCR_MSIZE_Pos)         /*Set 16-bit memory data size*/                             \
-   | (3 << DMA_SxCR_PL_Pos)            /*Set very high priority level*/                            \
-   | DMA_SxCR_DBM                      /*Enable double buffer mode*/                               \
-   | ((channel) << DMA_SxCR_CHSEL_Pos) /*Set channel [RM0090 Table 43 & 44]*/                      \
+#define DMA_INPUT_DMA_CR_CONFIG(channel, current_target)                                           \
+  (DMA_SxCR_EN                             /*Enable Stream*/                                       \
+   | DMA_SxCR_TCIE                         /*Enable transfer complete interrupt*/                  \
+   | (0 << DMA_SxCR_DIR_Pos)               /*Peripheral to Memory*/                                \
+   | DMA_SxCR_MINC                         /*Enable memory increment mode*/                        \
+   | (1 << DMA_SxCR_PSIZE_Pos)             /*Set 16-bit peripheral data size*/                     \
+   | (1 << DMA_SxCR_MSIZE_Pos)             /*Set 16-bit memory data size*/                         \
+   | (3 << DMA_SxCR_PL_Pos)                /*Set very high priority level*/                        \
+   | DMA_SxCR_DBM                          /*Enable double buffer mode*/                           \
+   | ((current_target) << DMA_SxCR_CT_Pos) /*Restore current target*/                              \
+   | ((channel) << DMA_SxCR_CHSEL_Pos)     /*Set channel [RM0090 Table 43 & 44]*/                  \
   )
 
 inline void switch_to_dshot_input_dma(
     DMA_Stream_TypeDef *stream,
     GPIO_TypeDef *gpio,
     uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN],
-    uint8_t channel)
+    uint8_t channel,
+    uint8_t idr_buf_front)
 {
   configure_dshot_input_internal(stream, gpio, idr_buf);
   stream->CR &= DMA_SxCR_CT;
-  stream->CR |= DMA_INPUT_DMA_CR_CONFIG(channel);
+  stream->CR |= DMA_INPUT_DMA_CR_CONFIG(channel, idr_buf_front);
 }
 
 // Fragile on confiugre_dshot_output_dma() implementation
@@ -341,7 +372,8 @@ uint32_t decode_erpm_idr(uint16_t idr_buf[DSHOT_INPUT_BUF_LEN], uint8_t bit)
       value |= 1 << (len - 1);
       old_p = p;
 
-      // Look for next zero edge. Manual loop unrolling and branch hinting to produce faster code.
+      // Look for next zero edge. Manual loop unrolling and branch hinting to produce faster
+      // code.
       do {
         if (__builtin_expect(!(p++)->value, 0) || __builtin_expect(!(p++)->value, 0) ||
             __builtin_expect(!(p++)->value, 0) || __builtin_expect(!(p++)->value, 0)) {
@@ -375,7 +407,7 @@ uint32_t decode_erpm_idr(uint16_t idr_buf[DSHOT_INPUT_BUF_LEN], uint8_t bit)
   if (start_margin < min_margin) { min_margin = start_margin; }
 
   static uint32_t next_margin_check_cycles = 0;
-  if (next_margin_check_cycles >= now) {
+  if (now >= next_margin_check_cycles) {
     next_margin_check_cycles += ERPM_MARGIN_CHECK_INTERVAL_CYCLES;
 
     // Handle a skipped check
@@ -426,35 +458,42 @@ inline void process_timer_idr_data(
   *new_idr_data_flag = false;
 }
 
+inline void setup_dshot_update_timer(void)
+{
+  // lower than DSHOT TX/RX interrupts but higher than SPI interrupts
+  // Register update interrupt with cpu
+  NVIC_SetPriority(TIM6_DAC_IRQn, 3);
+  NVIC_EnableIRQ(TIM6_DAC_IRQn);
+
+  TIM6->DIER = TIM_DIER_UIE; // Enable update interrupt flag
+  TIM6->ARR = DSHOT_UPDATE_ARR;
+  TIM6->CR1 = TIM_CR1_CEN    // Enable timer
+              | TIM_CR1_URS; // Set counter overflow as only update source
+}
+
 inline void dshot_dma_tranfer_complete_interrupt_handler(
     DMA_Stream_TypeDef *stream,
     TIM_TypeDef *timer,
     GPIO_TypeDef *gpio,
-    uint32_t gpio_moder_sel_mask,
-    uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN],
     uint8_t channel,
-    uint32_t cmd_ccr_buf[16][4],
+    uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN],
+    uint8_t *idr_buf_front,
+    uint32_t gpio_moder_sel_mask,
+    uint32_t cmd_ccr_buf[17][4],
     bool *new_data_flag)
 {
   if (is_in_output_mode(stream, timer)) {
     set_dshot_timer_input_mode(timer);
 
-    // clear overflow flag
-    timer->SR &= ~TIM_SR_UIF;
-
-    // wait for final bit to be clocked out
-    while (!(timer->SR & TIM_SR_UIF))
-      ;
-    timer->SR &= ~TIM_SR_UIF;
-
     // Set all to input ISR mode
     gpio->MODER &= gpio_moder_sel_mask;
 
-    switch_to_dshot_input_dma(stream, gpio, idr_buf, channel);
-    DMA2_Stream5->CR |= DMA_SxCR_EN; // Enable DMA stream
+    switch_to_dshot_input_dma(stream, gpio, idr_buf, channel, *idr_buf_front);
+    stream->CR |= DMA_SxCR_EN; // Enable DMA stream
   } else {
     set_dshot_timer_output_mode(timer);
-    switch_to_dshot_output_dma(stream, timer, cmd_ccr_buf, channel);
+
+    switch_to_dshot_output_dma(idr_buf_front, stream, timer, cmd_ccr_buf, channel);
     *new_data_flag = true;
   }
 }
@@ -466,9 +505,10 @@ void DMA2_Stream5_IRQHandler(void)
       DMA2_Stream5,
       TIM1,
       GPIOA,
-      TIM1_MODER_MASK,
-      tim1_idr_buf,
       6,
+      tim1_idr_buf,
+      &tim1_idr_buf_front,
+      TIM1_MODER_MASK,
       cmd_ccr_tim1_buf[cmd_ccr_front],
       &new_tim1_idr_data);
 }
@@ -480,9 +520,25 @@ void DMA2_Stream1_IRQHandler(void)
       DMA2_Stream1,
       TIM8,
       GPIOC,
-      TIM8_MODER_MASK,
-      tim8_idr_buf,
       7,
+      tim8_idr_buf,
+      &tim8_idr_buf_front,
+      TIM8_MODER_MASK,
       cmd_ccr_tim8_buf[cmd_ccr_front],
       &new_tim8_idr_data);
+}
+
+void TIM6_DAC_IRQHandler(void)
+{
+  // Set dshot pins to alternate function mode, starting output
+  GPIOA->MODER &= TIM1_MODER_MASK;
+  GPIOA->MODER |= TIM1_MODER_ALT_FUNC_MODE;
+  GPIOC->MODER &= TIM8_MODER_MASK;
+  GPIOC->MODER |= TIM8_MODER_ALT_FUNC_MODE;
+
+  // Start output DMA streams
+  DMA2_Stream5->CR |= DMA_SxCR_EN;
+  DMA2_Stream1->CR |= DMA_SxCR_EN;
+
+  TIM6->SR = 0; // clear interupt flag
 }
