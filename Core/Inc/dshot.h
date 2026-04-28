@@ -50,16 +50,17 @@ void build_dshot_frames(
 void setup_dshot_pins(void);
 void setup_dshot_timer(TIM_TypeDef *timer);
 void calculate_erpm_idr_parsing_constants(void);
-inline void configure_dshot_output_dma(
+void configure_dshot_output_dma(
     DMA_Stream_TypeDef *stream,
-    IRQn_Type irq,
-    TIM_TypeDef *timer,
-    uint32_t timer_ccr_buf[17][4],
-    uint8_t channel);
+    const IRQn_Type irq,
+    const TIM_TypeDef *timer,
+    const uint32_t timer_ccr_buf[17][4],
+    const uint8_t channel);
 void process_timer_idr_data(
-    uint8_t bit_offset,
-    uint16_t idr_buf[DSHOT_INPUT_BUF_LEN],
+    const uint8_t bit_offset,
+    const uint16_t idr_buf[DSHOT_INPUT_BUF_LEN],
     uint16_t value_buf[4],
-    bool *new_idr_data_flag);
+    bool *new_idr_data_flag,
+    const uint8_t motor_idx_base);
 
 #endif // !DSHOT_H

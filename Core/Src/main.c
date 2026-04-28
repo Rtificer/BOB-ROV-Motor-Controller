@@ -9,8 +9,8 @@
 volatile uint8_t erpm_data_buf[2][12];
 volatile uint8_t erpm_data_front = 0;
 
-volatile uint32_t cmd_ccr_tim1_buf[2][16][4];
-volatile uint32_t cmd_ccr_tim8_buf[2][16][4];
+volatile uint32_t cmd_ccr_tim1_buf[2][17][4];
+volatile uint32_t cmd_ccr_tim8_buf[2][17][4];
 volatile uint8_t cmd_ccr_front;
 
 volatile bool erpm_buf_write_not_in_progress;
@@ -131,8 +131,10 @@ int main(void)
   setup_dshot_timer(TIM1);
   setup_dshot_timer(TIM8);
 
-  configure_dshot_output_dma(DMA2_Stream5, TIM1, cmd_ccr_tim1_buf[cmd_ccr_front], 6);
-  configure_dshot_output_dma(DMA2_Stream1, TIM8, cmd_ccr_tim8_buf[cmd_ccr_front], 7);
+  configure_dshot_output_dma(
+      DMA2_Stream5, DMA2_Stream5_IRQn, TIM1, cmd_ccr_tim1_buf[cmd_ccr_front], 6);
+  configure_dshot_output_dma(
+      DMA2_Stream1, DMA2_Stream1_IRQn, TIM8, cmd_ccr_tim8_buf[cmd_ccr_front], 7);
 
   setup_dshot_pins();
 
@@ -144,11 +146,11 @@ int main(void)
   while (true) {
     if (new_tim1_idr_data) {
       uint8_t front = !((DMA2_Stream5->CR >> DMA_SxCR_CT_Pos) & 1);
-      process_timer_idr_data(8, tim1_idr_buf[front], value_buf, &new_tim1_idr_data);
+      process_timer_idr_data(8, tim1_idr_buf[front], value_buf, &new_tim1_idr_data, 0);
     }
     if (new_tim8_idr_data) {
       uint8_t front = !((DMA2_Stream1->CR >> DMA_SxCR_CT_Pos) & 1);
-      process_timer_idr_data(6, tim8_idr_buf[front], &value_buf[4], &new_tim8_idr_data);
+      process_timer_idr_data(6, tim8_idr_buf[front], &value_buf[4], &new_tim8_idr_data, 4);
     }
 
     // if both done processing

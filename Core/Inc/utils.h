@@ -27,6 +27,9 @@
 // Convert SRAM address
 #define BITBAND_SRAM(a, b) ((BITBAND_SRAM_BASE + (((a) - BITBAND_SRAM_REF) << 5) + ((b) << 2)))
 
+#define ARR_8_UINT32_T_MAX                                                                         \
+  {UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX, UINT32_MAX}
+
 typedef struct bitBandWord_s {
   uint32_t value;
   uint32_t junk[15];
@@ -44,7 +47,7 @@ static inline void unpack_12bit(const uint8_t in[12], uint16_t out[8])
   out[7] = ((in[10] & 0x0F) << 8) | in[11];
 }
 
-static inline void pack_12bit(uint16_t in[8], uint8_t out[12])
+static inline void pack_12bit(const uint16_t in[8], uint8_t out[12])
 {
   out[0] = in[0] >> 4;
   out[1] = (in[0] << 4) | (in[1] >> 8);

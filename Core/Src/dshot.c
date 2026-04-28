@@ -13,8 +13,6 @@
 // account for 0 value of counter
 #define DSHOT_OUTPUT_ARR (DSHOT_OUTPUT_BIT_LENGTH_CYCLES - 1)
 
-#define ERPM_START_MARGIN_US 5
-
 #define TIM1_MODER_MASK                                                                            \
   (~(GPIO_MODER_MODE8 | GPIO_MODER_MODE9 | GPIO_MODER_MODE10 | GPIO_MODER_MODE11))
 #define TIM8_MODER_MASK                                                                            \
@@ -34,14 +32,12 @@
 #define MAX_VALID_IDR_SAMPLES ((DSHOT_INPUT_BIT_COUNT + 2) * DSHOT_OVERSAMPLE_RATE)
 
 // Period at which to check preamble length
-#define MARGIN_CHECK_INTERVAL_US 500000
-
-// Target 5 us of input data ahead of leading edge
-#define ERPM_MARGIN_CHECK_INTERVAL_US 5
-
+#define ERPM_MARGIN_CHECK_INTERVAL_US 500000
 #define ERPM_MARGIN_CHECK_INTERVAL_CYCLES                                                          \
   (ERPM_MARGIN_CHECK_INTERVAL_US * (SYS_CLK_FREQ / 1000000U))
-#define ERPM_START_MARGIN_CYCLES (ERPM_START_MARGIN_US * (SYS_CLK_FREQ / 1000000U))
+
+// Target 5 cycles of input data ahead of leading edge
+#define ERPM_START_MARGIN_CYCLES 5
 
 #define DSHOT_UPDATE_RATE_HZ 8000
 #define DSHOT_UPDATE_PERIOD_CYCLES ROUND_DIV(SYS_CLK_FREQ, DSHOT_UPDATE_RATE_HZ)
@@ -56,7 +52,7 @@ volatile bool new_tim8_idr_data = false;
 static volatile uint8_t tim1_idr_buf_front = 0;
 static volatile uint8_t tim8_idr_buf_front = 0;
 
-static inline uint8_t dshot_crc(uint16_t data)
+static inline uint8_t dshot_crc(const uint16_t data)
 {
   return (~(data ^ (data >> 4) ^ (data >> 8))) & 0x0F;
 }
@@ -69,16 +65,16 @@ build_dshot_frames(const uint16_t words[8], uint32_t tim1_buf[17][4], uint32_t t
     uint16_t tim1_data = words[ch] << 4;
     uint16_t tim8_data = words[ch + 4] << 4;
 
-    uint8_t tim1_crc = dshot_crc(tim1_data);
-    uint8_t tim8_crc = dshot_crc(tim8_data);
+    uint8_t tim1_crc = dshot_crc(words[ch]);
+    uint8_t tim8_crc = dshot_crc(words[ch + 4]);
 
     // Construct frame fields and reverse bit order (to MSB)
     // Also place the CCR high period in the buffers.
 
     // Data bits 5-16 -> buffer positions 1-11
     for (uint8_t i = 0; i < 12; ++i) {
-      tim1_buf[i][ch] = (tim1_data >> (11 - i)) & 1 ? DSHOT_BIT1_CCR : DSHOT_BIT0_CCR;
-      tim8_buf[i][ch] = (tim8_data >> (11 - i)) & 1 ? DSHOT_BIT1_CCR : DSHOT_BIT0_CCR;
+      tim1_buf[i][ch] = (tim1_data >> (15 - i)) & 1 ? DSHOT_BIT1_CCR : DSHOT_BIT0_CCR;
+      tim8_buf[i][ch] = (tim8_data >> (15 - i)) & 1 ? DSHOT_BIT1_CCR : DSHOT_BIT0_CCR;
     }
 
     // CRC bits 0-4 -> buffer position 13-16
@@ -97,7 +93,7 @@ inline void setup_dshot_pins(void)
   GPIOA->MODER |= TIM1_MODER_ALT_FUNC_MODE;
 
   GPIOC->MODER &= TIM8_MODER_MASK;
-  GPIOC->MODER |= TIM1_MODER_ALT_FUNC_MODE;
+  GPIOC->MODER |= TIM8_MODER_ALT_FUNC_MODE;
 
   // Set DShot pins to correct alternate funciton
   // [RM0090 8.3.7 & Figure 26, DS8626 Table 7]
@@ -108,18 +104,18 @@ inline void setup_dshot_pins(void)
   GPIOC->AFR[1] |= (3 << GPIO_AFRH_AFSEL8_Pos) | (3 << GPIO_AFRH_AFSEL9_Pos);
 
   // Set DShot pins OSPEEDR value to high [DS8626 Table 50]
-  GPIOA->OSPEEDR = (2 << GPIO_OSPEEDR_OSPEED8_Pos) | (2 << GPIO_OSPEEDR_OSPEED9_Pos) |
-                   (2 << GPIO_OSPEEDR_OSPEED10_Pos) | (2 << GPIO_OSPEEDR_OSPEED11_Pos);
+  GPIOA->OSPEEDR |= (2 << GPIO_OSPEEDR_OSPEED8_Pos) | (2 << GPIO_OSPEEDR_OSPEED9_Pos) |
+                    (2 << GPIO_OSPEEDR_OSPEED10_Pos) | (2 << GPIO_OSPEEDR_OSPEED11_Pos);
 
   GPIOC->OSPEEDR |= (2 << GPIO_OSPEEDR_OSPEED6_Pos) | (2 << GPIO_OSPEEDR_OSPEED7_Pos) |
                     (2 << GPIO_OSPEEDR_OSPEED8_Pos) | (2 << GPIO_OSPEEDR_OSPEED9_Pos);
 
   // Set DShot pins to pull up
-  GPIOA->PUPDR = (2 << GPIO_PUPDR_PUPD8_Pos) | (2 << GPIO_PUPDR_PUPD9_Pos) |
-                 (2 << GPIO_PUPDR_PUPD10_Pos) | (2 << GPIO_PUPDR_PUPD11_Pos);
+  GPIOA->PUPDR |= (2 << GPIO_PUPDR_PUPD8_Pos) | (2 << GPIO_PUPDR_PUPD9_Pos) |
+                  (2 << GPIO_PUPDR_PUPD10_Pos) | (2 << GPIO_PUPDR_PUPD11_Pos);
 
-  GPIOC->PUPDR = (2 << GPIO_PUPDR_PUPD6_Pos) | (2 << GPIO_PUPDR_PUPD7_Pos) |
-                 (2 << GPIO_PUPDR_PUPD8_Pos) | (2 << GPIO_PUPDR_PUPD9_Pos);
+  GPIOC->PUPDR |= (2 << GPIO_PUPDR_PUPD6_Pos) | (2 << GPIO_PUPDR_PUPD7_Pos) |
+                  (2 << GPIO_PUPDR_PUPD8_Pos) | (2 << GPIO_PUPDR_PUPD9_Pos);
 }
 
 inline void setup_dshot_timer(TIM_TypeDef *timer)
@@ -162,8 +158,8 @@ inline void set_dshot_timer_output_mode(TIM_TypeDef *timer) { timer->ARR = DSHOT
 
 static inline void configure_dshot_output_internal(
     DMA_Stream_TypeDef *stream,
-    TIM_TypeDef *timer,
-    uint32_t timer_ccr_buf[16][4])
+    const TIM_TypeDef *timer,
+    const uint32_t timer_ccr_buf[17][4])
 {
   reset_dma_stream(stream);
 
@@ -195,10 +191,10 @@ static inline void configure_dshot_output_internal(
 
 inline void configure_dshot_output_dma(
     DMA_Stream_TypeDef *stream,
-    IRQn_Type irq,
-    TIM_TypeDef *timer,
-    uint32_t timer_ccr_buf[17][4],
-    uint8_t channel)
+    const IRQn_Type irq,
+    const TIM_TypeDef *timer,
+    const uint32_t timer_ccr_buf[17][4],
+    const uint8_t channel)
 {
   NVIC_SetPriority(irq, 2);
   NVIC_EnableIRQ(irq);
@@ -210,9 +206,9 @@ inline void configure_dshot_output_dma(
 inline void switch_to_dshot_output_dma(
     uint8_t *idr_buf_front,
     DMA_Stream_TypeDef *stream,
-    TIM_TypeDef *timer,
-    uint32_t timer_ccr_buf[17][4],
-    uint8_t channel)
+    const TIM_TypeDef *timer,
+    const uint32_t timer_ccr_buf[17][4],
+    const uint8_t channel)
 {
   *idr_buf_front = (stream->CR >> DMA_SxCR_CT_Pos) & 1;
   configure_dshot_output_internal(stream, timer, timer_ccr_buf);
@@ -223,8 +219,8 @@ inline void switch_to_dshot_output_dma(
 
 inline void configure_dshot_input_internal(
     DMA_Stream_TypeDef *stream,
-    GPIO_TypeDef *gpio,
-    uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN])
+    const GPIO_TypeDef *gpio,
+    const uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN])
 {
   reset_dma_stream(stream);
 
@@ -253,10 +249,10 @@ inline void configure_dshot_input_internal(
 
 inline void switch_to_dshot_input_dma(
     DMA_Stream_TypeDef *stream,
-    GPIO_TypeDef *gpio,
-    uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN],
-    uint8_t channel,
-    uint8_t idr_buf_front)
+    const GPIO_TypeDef *gpio,
+    const uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN],
+    const uint8_t channel,
+    const uint8_t idr_buf_front)
 {
   configure_dshot_input_internal(stream, gpio, idr_buf);
   stream->CR &= DMA_SxCR_CT;
@@ -264,7 +260,7 @@ inline void switch_to_dshot_input_dma(
 }
 
 // Fragile on confiugre_dshot_output_dma() implementation
-inline bool is_in_output_mode(DMA_Stream_TypeDef *stream, TIM_TypeDef *timer)
+inline bool is_in_output_mode(const DMA_Stream_TypeDef *stream, const TIM_TypeDef *timer)
 {
   return stream->PAR == (uint32_t)&timer->DMAR;
 }
@@ -307,9 +303,12 @@ static uint32_t decode_bb_value(uint32_t value)
   return value;
 }
 
-uint32_t decode_erpm_idr(uint16_t idr_buf[DSHOT_INPUT_BUF_LEN], uint8_t bit)
+uint32_t decode_erpm_idr(
+    const uint16_t idr_buf[DSHOT_INPUT_BUF_LEN],
+    const uint8_t bit,
+    const uint8_t motor_idx)
 {
-  static uint8_t preamble_skip = 0;
+  static uint8_t preamble_skip[8] = {0};
 
   uint32_t now = DWT->CYCCNT;
   uint32_t value = 0;
@@ -322,7 +321,7 @@ uint32_t decode_erpm_idr(uint16_t idr_buf[DSHOT_INPUT_BUF_LEN], uint8_t bit)
 
   // Jump forward in the buffer to just before where we anticipate the first
   // zero
-  p += preamble_skip;
+  p += preamble_skip[motor_idx];
 
   // Eliminate leading high signal level by looking for first zero bit in data
   // stream. Manual loop unrolling and branch hinting to produce faster code.
@@ -336,11 +335,12 @@ uint32_t decode_erpm_idr(uint16_t idr_buf[DSHOT_INPUT_BUF_LEN], uint8_t bit)
   const uint32_t start_margin = p - beg_p;
 
   if (p >= end_p) {
-    // not returning telemetry is ok if the esc cpu is overburdened.
-    // In that case no edge will be found and BB_NOEDGE indicates the condition to caller
+    // Not returning telemetry is ok if the ESC CPU is overburdened.
+    // In that case no edge will be found and DSHOT_TELEMENTRY_NOEDGE indicates the condition to
+    // caller
     if (preamble_skip > 0) {
       // Increase the start margin
-      preamble_skip--;
+      preamble_skip[motor_idx]--;
     }
     return DSHOT_TELEMENTRY_NOEDGE;
   }
@@ -372,8 +372,8 @@ uint32_t decode_erpm_idr(uint16_t idr_buf[DSHOT_INPUT_BUF_LEN], uint8_t bit)
       value |= 1 << (len - 1);
       old_p = p;
 
-      // Look for next zero edge. Manual loop unrolling and branch hinting to produce faster
-      // code.
+      // Look for next zero edge.
+      // Manual loop unrolling and branch hinting to produce faster code.
       do {
         if (__builtin_expect(!(p++)->value, 0) || __builtin_expect(!(p++)->value, 0) ||
             __builtin_expect(!(p++)->value, 0) || __builtin_expect(!(p++)->value, 0)) {
@@ -403,25 +403,25 @@ uint32_t decode_erpm_idr(uint16_t idr_buf[DSHOT_INPUT_BUF_LEN], uint8_t bit)
 
   // Data appears valid
 
-  static uint32_t min_margin = UINT32_MAX;
-  if (start_margin < min_margin) { min_margin = start_margin; }
+  static uint32_t min_margin[8] = ARR_8_UINT32_T_MAX;
+  if (start_margin < min_margin[motor_idx]) { min_margin[motor_idx] = start_margin; }
 
-  static uint32_t next_margin_check_cycles = 0;
-  if (now >= next_margin_check_cycles) {
-    next_margin_check_cycles += ERPM_MARGIN_CHECK_INTERVAL_CYCLES;
+  static uint32_t next_margin_check_cycles[8] = {0};
+  if ((int32_t)(now - next_margin_check_cycles[motor_idx]) >= 0) { // acount for wrapping
+    next_margin_check_cycles[motor_idx] += ERPM_MARGIN_CHECK_INTERVAL_CYCLES;
 
     // Handle a skipped check
-    if (next_margin_check_cycles < now) {
-      next_margin_check_cycles = now + ERPM_START_MARGIN_CYCLES;
+    if (next_margin_check_cycles[motor_idx] < now) {
+      next_margin_check_cycles[motor_idx] = now + ERPM_MARGIN_CHECK_INTERVAL_CYCLES;
     }
 
-    if (min_margin > ERPM_START_MARGIN_CYCLES) {
-      preamble_skip = min_margin - ERPM_START_MARGIN_CYCLES;
+    if (min_margin[motor_idx] > ERPM_START_MARGIN_CYCLES) {
+      preamble_skip[motor_idx] = min_margin[motor_idx] - ERPM_START_MARGIN_CYCLES;
     } else {
-      preamble_skip = 0;
+      preamble_skip[motor_idx] = 0;
     }
 
-    min_margin = UINT32_MAX;
+    min_margin[motor_idx] = UINT32_MAX;
   }
 
   // The anticipated edges were observed
@@ -434,13 +434,14 @@ uint32_t decode_erpm_idr(uint16_t idr_buf[DSHOT_INPUT_BUF_LEN], uint8_t bit)
 }
 
 inline void process_timer_idr_data(
-    uint8_t bit_offset,
-    uint16_t idr_buf[DSHOT_INPUT_BUF_LEN],
+    const uint8_t bit_offset,
+    const uint16_t idr_buf[DSHOT_INPUT_BUF_LEN],
     uint16_t value_buf[4],
-    bool *new_idr_data_flag)
+    bool *new_idr_data_flag,
+    const uint8_t motor_idx_base)
 {
   for (uint8_t i = 0; i < 4; ++i) {
-    uint32_t result = decode_erpm_idr(idr_buf, i + bit_offset);
+    uint32_t result = decode_erpm_idr(idr_buf, i + bit_offset, motor_idx_base + i);
     if (__builtin_expect(result == DSHOT_TELEMETRY_INVALID, false)) {
       result = 0x0EFF;
     } else if (__builtin_expect(result == DSHOT_TELEMENTRY_NOEDGE, false)) {
@@ -475,11 +476,11 @@ inline void dshot_dma_tranfer_complete_interrupt_handler(
     DMA_Stream_TypeDef *stream,
     TIM_TypeDef *timer,
     GPIO_TypeDef *gpio,
-    uint8_t channel,
-    uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN],
+    const uint8_t channel,
+    const uint16_t idr_buf[2][DSHOT_INPUT_BUF_LEN],
     uint8_t *idr_buf_front,
-    uint32_t gpio_moder_sel_mask,
-    uint32_t cmd_ccr_buf[17][4],
+    const uint32_t gpio_moder_sel_mask,
+    const uint32_t cmd_ccr_buf[17][4],
     bool *new_data_flag)
 {
   if (is_in_output_mode(stream, timer)) {

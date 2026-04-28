@@ -62,7 +62,7 @@ inline void setup_spi_pins(void)
   // Set SPI pins to correct alternate funciton
   // [RM0090 8.3.7 & Figure 26, DS8626 Table 7]
   GPIOB->AFR[1] &=
-      ~(GPIO_MODER_MODE12_Msk | GPIO_AFRH_AFSEL13_Msk | GPIO_AFRH_AFSEL14_Msk |
+      ~(GPIO_AFRH_AFSEL12_Msk | GPIO_AFRH_AFSEL13_Msk | GPIO_AFRH_AFSEL14_Msk |
         GPIO_AFRH_AFSEL15_Msk);
   GPIOB->AFR[1] |= (5 << GPIO_AFRH_AFSEL12_Pos) | (5 << GPIO_AFRH_AFSEL13_Pos) |
                    (5 << GPIO_AFRH_AFSEL14_Pos) | (5 << GPIO_AFRH_AFSEL15_Pos);
@@ -88,7 +88,7 @@ inline void setup_spi_dma(void)
   DMA1_Stream3->PAR = (uint32_t)&SPI2->DR;
   // Set buffer pointer
   DMA1_Stream3->M0AR = (uint32_t)cmd_data_buf;
-  // Transfer 11 bytes
+  // Transfer 12 bytes
   DMA1_Stream3->NDTR = 12;
   // Enabled direct mode (no FIFO)
   DMA1_Stream3->FCR = 0;
@@ -107,8 +107,8 @@ inline void setup_spi_dma(void)
   // Set source periphal pointer
   DMA1_Stream4->PAR = (uint32_t)&SPI2->DR;
   // Set buffer pointer
-  DMA1_Stream4->M0AR = (uint32_t)erpm_data_buf;
-  // Transfer 11 bytes
+  DMA1_Stream4->M0AR = (uint32_t)erpm_data_buf[erpm_data_front];
+  // Transfer 12 bytes
   DMA1_Stream4->NDTR = 12;
   // Enable direct mode (no FIFO)
   DMA1_Stream4->FCR = 0;
@@ -132,6 +132,9 @@ void DMA1_Stream3_IRQHandler(void)
   // Clear transfer complete interrupt flag
   DMA1->LIFCR = DMA_LIFCR_CTCIF3;
 
+  DMA1_Stream3->CR &= ~DMA_SxCR_EN;
+  DMA1_Stream4->CR &= ~DMA_SxCR_EN;
+
   // Wait for CRC byte to transfer
   while (!(SPI2->SR & SPI_SR_RXNE))
     ;
@@ -151,16 +154,16 @@ void DMA1_Stream3_IRQHandler(void)
 
     // switch the double buffer
     cmd_ccr_front ^= 1;
-
-    // Wait for NSS = high
-    while (SPI2->SR & SPI_SR_BSY)
-      ;
-
-    // Now we can clear CRC [RM0090 28.3.6]
-    SPI2->CR1 &= ~SPI_CR1_SPE;
-    SPI2->CR1 &= ~SPI_CR1_CRCEN;
-    SPI2->CR1 |= SPI_CR1_CRCEN;
   }
+
+  // Wait for NSS = high
+  while (!(GPIOB->IDR & GPIO_IDR_ID12))
+    ;
+
+  // Now we can clear CRC [RM0090 28.3.6]
+  SPI2->CR1 &= ~SPI_CR1_SPE;
+  SPI2->CR1 &= ~SPI_CR1_CRCEN;
+  SPI2->CR1 |= SPI_CR1_CRCEN;
 
   // Reconfigure + Re-enable the DMA
   DMA1_Stream3->NDTR = 12;
